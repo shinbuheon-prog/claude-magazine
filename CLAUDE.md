@@ -77,11 +77,34 @@ claude-magazine/
 │   ├── template_B_draft.txt
 │   └── template_C_factcheck.txt
 │
-├── scripts/               ← 운영 진입점
+├── scripts/               ← 운영 진입점 + PDF 생성
 │   ├── run_weekly_brief.py
-│   └── run_monthly_report.py
+│   ├── run_monthly_report.py
+│   ├── generate_pdf.js        ← Puppeteer 월간 PDF 생성 (TASK_010)
+│   ├── build_and_pdf.ps1      ← 빌드→PDF 원스톱 PowerShell 스크립트
+│   └── package.json           ← puppeteer 의존성
 │
-├── docs/                  ← 편집·법·거버넌스 규정
+├── web/                   ← 매거진 프론트엔드 (TASK_009, TASK_010)
+│   ├── index.html
+│   ├── package.json           ← Vite + Tailwind + React + Recharts
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   └── src/
+│       ├── main.jsx
+│       ├── index.css           ← @media print A4 스타일
+│       ├── theme.js            ← 디자인 시스템 토큰
+│       ├── App.jsx             ← 탭 UI + ?print=1 PDF 모드
+│       └── components/
+│           ├── CoverPage.jsx
+│           ├── ArticlePage.jsx
+│           └── InsightPage.jsx
+│
+├── output/                ← 생성된 PDF (gitignore)
+│   └── claude-magazine-YYYY-MM.pdf
+│
+├── docs/                  ← 편집·법·거버넌스·설계 규정
+│   ├── automation_design.md   ← 전체 자동화 파이프라인 설계도 ★
 │   ├── editorial_checklist.md
 │   ├── source_policy.md
 │   └── governance.md
@@ -110,6 +133,12 @@ python scripts/run_weekly_brief.py --topic "TOPIC" --publish
 
 # 팩트체크 단독 실행
 python pipeline/fact_checker.py --draft drafts/FILENAME.md
+
+# 월간 PDF 생성 (PowerShell)
+.\scripts\build_and_pdf.ps1 -Month 2026-05
+
+# 월간 PDF 생성 (Node 직접)
+cd scripts && node generate_pdf.js --month 2026-05
 ```
 
 ## 편집 검수 체크리스트 (게시 전 필수 10개)
