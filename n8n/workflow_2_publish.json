@@ -1,0 +1,112 @@
+{
+  "name": "Claude Magazine — Publish After Editor Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "publish-approved",
+        "responseMode": "lastNode",
+        "options": {
+          "responseData": "allEntries"
+        }
+      },
+      "name": "Webhook (publish-approved)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "publish-approved"
+    },
+    {
+      "parameters": {
+        "command": "=python scripts/run_weekly_brief.py --topic {{$json[\"body\"][\"topic\"]}} --publish",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}"
+      },
+      "name": "Execute run_weekly_brief.py --publish",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=발행 완료: {{$json[\"stdout\"]}}\n주제: {{$node[\"Webhook (publish-approved)\"].json[\"body\"][\"topic\"]}}",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (Published)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 560]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=[workflow_2 발행 실패] execution: {{$json[\"execution\"][\"id\"]}}\nerror: {{$json[\"execution\"][\"error\"][\"message\"]}}",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (Error)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [500, 560]
+    }
+  ],
+  "connections": {
+    "Webhook (publish-approved)": {
+      "main": [
+        [
+          {
+            "node": "Execute run_weekly_brief.py --publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute run_weekly_brief.py --publish": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (Published)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Seoul"
+  },
+  "id": "workflow_2_publish",
+  "tags": [
+    {
+      "name": "claude-magazine"
+    },
+    {
+      "name": "publish"
+    }
+  ]
+}
