@@ -3,7 +3,6 @@ import CoverPage from './components/CoverPage';
 import ArticlePage from './components/ArticlePage';
 import InsightPage from './components/InsightPage';
 
-// 샘플 데이터 — 실제 운영 시 pipeline/brief_generator.py 출력으로 교체
 const SAMPLE_COVER = {
   issue: "VOL.01",
   date: "2026년 5월",
@@ -53,12 +52,30 @@ const SAMPLE_INSIGHT = {
 const PAGES = ['표지', '기사', '인사이트'];
 
 export default function App() {
+  // ?print=1 → 전체 페이지 순서대로 렌더 (Puppeteer PDF 전용)
+  const isPrint = new URLSearchParams(window.location.search).has('print');
+
+  if (isPrint) {
+    return (
+      <div>
+        <div className="print-page">
+          <CoverPage coverData={SAMPLE_COVER} />
+        </div>
+        <div className="print-page">
+          <ArticlePage pageData={SAMPLE_ARTICLE} />
+        </div>
+        <div className="print-page">
+          <InsightPage insightData={SAMPLE_INSIGHT} />
+        </div>
+      </div>
+    );
+  }
+
   const [page, setPage] = useState('표지');
 
   return (
     <div className="min-h-screen bg-gray-200 py-8">
-      {/* 페이지 전환 탭 */}
-      <div className="flex justify-center gap-2 mb-6">
+      <div className="no-print flex justify-center gap-2 mb-6">
         {PAGES.map((p) => (
           <button
             key={p}
@@ -74,8 +91,8 @@ export default function App() {
         ))}
       </div>
 
-      {page === '표지'    && <CoverPage   coverData={SAMPLE_COVER} />}
-      {page === '기사'    && <ArticlePage pageData={SAMPLE_ARTICLE} />}
+      {page === '표지'     && <CoverPage   coverData={SAMPLE_COVER} />}
+      {page === '기사'     && <ArticlePage pageData={SAMPLE_ARTICLE} />}
       {page === '인사이트' && <InsightPage insightData={SAMPLE_INSIGHT} />}
     </div>
   );

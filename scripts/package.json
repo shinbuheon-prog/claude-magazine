@@ -1,0 +1,15 @@
+{
+  "name": "claude-magazine-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "pdf": "node generate_pdf.js",
+    "pdf:month": "node generate_pdf.js --month"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "puppeteer": "^24.15.0",
+    "serve": "^14.2.3"
+  }
+}

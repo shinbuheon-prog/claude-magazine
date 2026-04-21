@@ -5,3 +5,13 @@ logs/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Node.js
+node_modules/
+package-lock.json
+
+# 빌드 산출물
+web/dist/
+
+# PDF 출력 (버전관리 제외)
+output/

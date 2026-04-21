@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Noto Serif KR', serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* PDF 인쇄 모드 — 각 .print-page 가 A4 한 장 */
+@media print {
+  body { margin: 0; background: white; }
+
+  .print-page {
+    width: 210mm;
+    min-height: 297mm;
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+  }
+
+  /* 마지막 페이지는 강제 break 불필요 */
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* 탭 UI 숨기기 */
+  .no-print { display: none !important; }
+}
