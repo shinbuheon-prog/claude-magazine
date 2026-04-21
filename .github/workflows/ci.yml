@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 패키지 설치 (테스트용 최소 의존성)
+        run: |
+          pip install anthropic python-dotenv PyJWT requests
+
+      - name: Ruff lint
+        run: |
+          pip install ruff
+          ruff check pipeline/ scripts/ codex_workflow.py
+
+      - name: 코덱스 워크플로우 보드 확인
+        run: python codex_workflow.py list
+
+      - name: source_registry 스모크 테스트
+        run: python pipeline/source_registry.py
+        env:
+          SOURCE_DB_PATH: /tmp/test_registry.db
+
+      - name: brief_generator import 확인
+        run: python -c "from pipeline.brief_generator import generate_brief, load_sources; print('OK')"
+
+      - name: fact_checker import 확인
+        run: python -c "from pipeline.fact_checker import run_factcheck, load_sources_for_article; print('OK')"

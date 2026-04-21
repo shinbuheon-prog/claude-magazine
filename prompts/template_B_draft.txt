@@ -1,0 +1,26 @@
+<approved_brief>
+{{approved_brief}}
+</approved_brief>
+
+<section>
+{{section_name}}
+</section>
+
+<source_bundle>
+{{source_bundle}}
+</source_bundle>
+
+<style_rules>
+- 군더더기 금지
+- 마케팅 문구 금지
+- 필요한 곳에만 예시 (가상 사례 금지)
+- 검증이 필요한 표현은 [검증] 태그로 표시
+- 각 문단은 하나의 결론만 다룬다
+- 수치·인용·사례명은 출처와 일치해야 한다
+</style_rules>
+
+<task>
+위 섹션 초안을 한국어로 작성하라.
+각 주장 문장 끝에 (source_id)를 임시 표기하라.
+출처를 확인할 수 없는 주장에는 (UNKNOWN)을 표기하라.
+</task>

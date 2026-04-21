@@ -1,0 +1,15 @@
+# CODEX_TASKS — 클로드 매거진
+# 업데이트: 2026-04-21
+#
+# FORMAT: TASK_ID | 제목 | status
+# STATUS: todo | implemented | reviewed | merged
+
+TASK_001 | 프로젝트 초기 설정 (.env, data/, drafts/, logs/) | todo
+TASK_002 | Ghost CMS 세팅 (무료 인바운드 출시) | todo
+TASK_003 | Claude API 기사 브리프 파이프라인 | todo
+TASK_004 | 출처 레지스트리 시스템 (SQLite) | todo
+TASK_005 | 팩트체크 에이전트 (Opus 4.7) | todo
+TASK_006 | 이메일/뉴스레터 발행 (Ghost Newsletter API) | todo
+TASK_007 | n8n 워크플로우 자동화 (3개 워크플로우) | todo
+TASK_008 | Langfuse 관측 연동 | todo
+TASK_009 | 매거진 웹 레이아웃 컴포넌트 (React + Recharts) | todo

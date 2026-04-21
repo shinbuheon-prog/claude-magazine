@@ -1,0 +1,28 @@
+name: CODEX_TASKS 보드 동기화
+
+on:
+  push:
+    paths:
+      - "tasks/TASK_*.md"
+    branches: [main, develop]
+
+jobs:
+  sync-board:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 보드 동기화
+        run: python codex_workflow.py sync
+
+      - name: 변경사항 커밋
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: CODEX_TASKS 보드 자동 동기화 [skip ci]"
+          file_pattern: CODEX_TASKS

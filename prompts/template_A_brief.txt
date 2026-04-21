@@ -1,0 +1,37 @@
+<publication>
+독자=Claude를 실제 업무에 활용하는 한국어권 실무자 (제품 리더, AI 도입 담당자, 개발자·기술 PM)
+목표=의사결정에 직접 쓸 수 있는 실무 인사이트 제공
+톤=분석적, 실무적, 과장 금지, 마케팅 문구 금지
+</publication>
+
+<topic>
+{{topic}}
+</topic>
+
+<sources>
+{{source_bundle}}
+</sources>
+
+<required_json>
+{
+  "working_title": "string (독자가 클릭하고 싶은 제목, 낚시성 금지)",
+  "angle": "string (이 기사가 다루는 핵심 관점 — 왜 이 각도인가)",
+  "why_now": "string (지금 다뤄야 하는 이유 — 타이밍 근거)",
+  "outline": [
+    {
+      "section": "string (섹션 제목)",
+      "points": ["string (핵심 포인트 1)", "string (핵심 포인트 2)"]
+    }
+  ],
+  "evidence_map": [
+    {
+      "claim": "string (주장 요약)",
+      "source_id": "string (출처 식별자, 없으면 'UNKNOWN')"
+    }
+  ],
+  "unknowns": ["string (확인이 필요하거나 출처가 부족한 항목)"],
+  "risk_flags": ["string (저작권·사실오류·개인정보·편향 위험 항목)"]
+}
+</required_json>
+
+위 JSON만 반환하라. 설명이나 markdown 코드블록을 붙이지 말라.
