@@ -1,0 +1,138 @@
+{
+  "name": "Claude Magazine — SNS Rewriter (Ghost post.published)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ghost-post-published",
+        "responseMode": "lastNode",
+        "options": {
+          "responseData": "allEntries"
+        }
+      },
+      "name": "Webhook (Ghost post.published)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "ghost-post-published"
+    },
+    {
+      "parameters": {
+        "command": "=python pipeline/channel_rewriter.py --draft {{$json[\"body\"][\"post\"][\"current\"][\"draft_path\"]}} --channel sns",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}"
+      },
+      "name": "Rewrite for SNS",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 220]
+    },
+    {
+      "parameters": {
+        "command": "=python pipeline/channel_rewriter.py --draft {{$node[\"Webhook (Ghost post.published)\"].json[\"body\"][\"post\"][\"current\"][\"draft_path\"]}} --channel linkedin",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}"
+      },
+      "name": "Rewrite for LinkedIn",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=SNS 초안 생성 완료, 검토 후 게시하세요\nGhost 포스트: {{$node[\"Webhook (Ghost post.published)\"].json[\"body\"][\"post\"][\"current\"][\"url\"]}}\nSNS stdout: {{$node[\"Rewrite for SNS\"].json[\"stdout\"]}}\nLinkedIn stdout: {{$node[\"Rewrite for LinkedIn\"].json[\"stdout\"]}}",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (SNS Ready)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=[workflow_3 SNS 재가공 실패] execution: {{$json[\"execution\"][\"id\"]}}\nerror: {{$json[\"execution\"][\"error\"][\"message\"]}}",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (Error)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [500, 600]
+    }
+  ],
+  "connections": {
+    "Webhook (Ghost post.published)": {
+      "main": [
+        [
+          {
+            "node": "Rewrite for SNS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Rewrite for LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rewrite for SNS": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (SNS Ready)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rewrite for LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (SNS Ready)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Seoul"
+  },
+  "id": "workflow_3_sns",
+  "tags": [
+    {
+      "name": "claude-magazine"
+    },
+    {
+      "name": "sns"
+    }
+  ]
+}

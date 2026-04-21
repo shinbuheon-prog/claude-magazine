@@ -1,15 +1,21 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-21
+# 업데이트: 2026-04-21 22:39
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
 
-TASK_001 | 프로젝트 초기 설정 (.env, data/, drafts/, logs/) | todo
-TASK_002 | Ghost CMS 세팅 (무료 인바운드 출시) | todo
-TASK_003 | Claude API 기사 브리프 파이프라인 | todo
-TASK_004 | 출처 레지스트리 시스템 (SQLite) | todo
-TASK_005 | 팩트체크 에이전트 (Opus 4.7) | todo
-TASK_006 | 이메일/뉴스레터 발행 (Ghost Newsletter API) | todo
-TASK_007 | n8n 워크플로우 자동화 (3개 워크플로우) | todo
-TASK_008 | Langfuse 관측 연동 | todo
-TASK_009 | 매거진 웹 레이아웃 컴포넌트 (React + Recharts) | todo
+TASK_001 | 프로젝트 초기 설정 (.env, data/, drafts/, logs/) | merged
+TASK_002 | Ghost CMS 세팅 (무료 인바운드 출시) | merged
+TASK_003 | Claude API 기사 브리프 파이프라인 | merged
+TASK_004 | 출처 레지스트리 시스템 (SQLite) | merged
+TASK_005 | 팩트체크 에이전트 (Opus 4.7) | merged
+TASK_006 | 이메일/뉴스레터 발행 (Ghost Newsletter API) | merged
+TASK_007 | n8n 워크플로우 자동화 (3개 워크플로우) | merged
+TASK_008 | Langfuse 관측 연동 | merged
+TASK_009 | 매거진 웹 레이아웃 컴포넌트 (React + Recharts) | merged
+TASK_010 | Puppeteer 기반 월간 PDF 생성 파이프라인 | merged
+TASK_011 | develop→main 머지 + v0.1.0 릴리즈 | todo
+TASK_012 | 운영환경 체크 스크립트 (check_env.py) | merged
+TASK_013 | 주간 브리프 E2E 스모크 테스트 (test_e2e.py) | merged
+TASK_014 | n8n 워크플로우 import 자동화 (n8n_import.py) | merged
+TASK_015 | Ghost Webhook 자동 등록 (ghost_webhook_setup.py) | merged
