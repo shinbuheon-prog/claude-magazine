@@ -9,6 +9,12 @@ from datetime import datetime
 
 TASKS_DIR = Path(__file__).parent / "tasks"
 BOARD_FILE = Path(__file__).parent / "CODEX_TASKS"
+ROOT = Path(__file__).parent
+DATA_DIR = ROOT / "data"
+DRAFTS_DIR = ROOT / "drafts"
+LOGS_DIR = ROOT / "logs"
+ENV_FILE = ROOT / ".env"
+ENV_EXAMPLE_FILE = ROOT / ".env.example"
 
 VALID_STATUSES = ["todo", "implemented", "reviewed", "merged"]
 
@@ -46,6 +52,18 @@ def sync():
     """tasks/ 폴더의 TASK_*.md 파일들을 스캔해 보드 동기화"""
     existing = parse_board()
     md_files = sorted(TASKS_DIR.glob("TASK_*.md"))
+
+    for directory in (DATA_DIR, DRAFTS_DIR, LOGS_DIR):
+        directory.mkdir(exist_ok=True)
+        print(f"[dir] {directory.name}/ 준비 완료")
+
+    if not ENV_FILE.exists():
+        if ENV_EXAMPLE_FILE.exists():
+            print("[env] .env 파일이 없습니다. '.env.example'을 복사해 '.env'를 생성하세요.")
+        else:
+            print("[env] .env.example 파일이 없습니다. 환경변수 파일을 수동으로 준비하세요.")
+    else:
+        print("[env] .env 파일 확인 완료")
 
     for md_file in md_files:
         task_id = md_file.stem  # e.g. TASK_001
