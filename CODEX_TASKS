@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-21 22:39
+# 업데이트: 2026-04-21 22:53
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -14,7 +14,7 @@ TASK_007 | n8n 워크플로우 자동화 (3개 워크플로우) | merged
 TASK_008 | Langfuse 관측 연동 | merged
 TASK_009 | 매거진 웹 레이아웃 컴포넌트 (React + Recharts) | merged
 TASK_010 | Puppeteer 기반 월간 PDF 생성 파이프라인 | merged
-TASK_011 | develop→main 머지 + v0.1.0 릴리즈 | todo
+TASK_011 | develop→main 머지 + v0.1.0 릴리즈 | merged
 TASK_012 | 운영환경 체크 스크립트 (check_env.py) | merged
 TASK_013 | 주간 브리프 E2E 스모크 테스트 (test_e2e.py) | merged
 TASK_014 | n8n 워크플로우 import 자동화 (n8n_import.py) | merged
