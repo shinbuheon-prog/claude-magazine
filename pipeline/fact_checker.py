@@ -4,6 +4,7 @@
 사용법: python pipeline/fact_checker.py --draft drafts/article.md [--article-id ARTICLE_ID]
 """
 import argparse
+import io
 import json
 import os
 import sys
@@ -12,6 +13,11 @@ from pathlib import Path
 
 import anthropic
 from dotenv import load_dotenv
+
+# Windows 환경에서 한국어/특수문자 출력을 위한 UTF-8 강제 설정
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 load_dotenv()
 
@@ -91,15 +97,50 @@ def run_factcheck(draft_text: str, source_bundle: str) -> str:
     return result_text
 
 
+def dry_run_preview(draft_text: str, source_bundle: str) -> None:
+    """API 호출 없이 시스템 프롬프트와 유저 프롬프트를 출력한다."""
+    template = load_template()
+
+    system_prompt = (
+        "당신은 팩트체커다.\n"
+        "초안의 각 문장을 출처와 대조해 아래 4개 중 하나로 판정하라.\n"
+        "1) 확인됨\n2) 과장됨\n3) 출처 불충분\n4) 수정 필요"
+    )
+
+    user_prompt = (
+        template
+        .replace("{{draft_text}}", draft_text)
+        .replace("{{source_bundle}}", source_bundle)
+    )
+
+    print("=" * 60)
+    print("[DRY-RUN] SYSTEM PROMPT")
+    print("=" * 60)
+    print(system_prompt)
+    print()
+    print("=" * 60)
+    print("[DRY-RUN] USER PROMPT")
+    print("=" * 60)
+    print(user_prompt)
+    print()
+    print("[DRY-RUN] API 호출 없이 종료합니다.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="팩트체크 에이전트")
     parser.add_argument("--draft", required=True, help="초안 마크다운 파일 경로")
     parser.add_argument("--article-id", help="출처 레지스트리 기사 ID (선택)")
     parser.add_argument("--out", help="결과 저장 경로 (생략 시 자동 생성)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="API 호출 없이 시스템/유저 프롬프트를 미리보기 출력")
     args = parser.parse_args()
 
     draft_text = Path(args.draft).read_text(encoding="utf-8")
     source_bundle = load_sources_for_article(args.article_id)
+
+    if args.dry_run:
+        dry_run_preview(draft_text, source_bundle)
+        return
 
     print("=== 팩트체크 시작 ===", file=sys.stderr)
     result = run_factcheck(draft_text, source_bundle)
