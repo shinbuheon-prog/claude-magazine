@@ -1,5 +1,6 @@
 .env
 data/
+data/pii_mappings/
 drafts/
 logs/
 __pycache__/

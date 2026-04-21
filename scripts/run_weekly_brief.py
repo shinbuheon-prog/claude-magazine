@@ -88,15 +88,20 @@ def _write_publish_log(topic: str, result: dict, mode: str, ts: str) -> Path:
     return log_path
 
 
-def _generate_brief_with_fallback(topic: str, source_bundle: str, force_dry_run: bool) -> dict:
+def _generate_brief_with_fallback(
+    topic: str,
+    source_bundle: str,
+    force_dry_run: bool,
+    article_id: str = "",
+) -> dict:
     if force_dry_run:
-        return generate_brief(topic, source_bundle, dry_run=True)
+        return generate_brief(topic, source_bundle, dry_run=True, article_id=article_id)
 
     try:
-        return generate_brief(topic, source_bundle, dry_run=False)
+        return generate_brief(topic, source_bundle, dry_run=False, article_id=article_id)
     except Exception as exc:
         print(f"[warn] Claude 브리프 생성 실패, dry-run 샘플로 폴백: {exc}")
-        return generate_brief(topic, source_bundle, dry_run=True)
+        return generate_brief(topic, source_bundle, dry_run=True, article_id=article_id)
 
 
 def _write_section_with_fallback(brief: dict, section_name: str, source_bundle: str, force_dry_run: bool) -> str:
@@ -114,6 +119,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="주간 브리프 실행")
     parser.add_argument("--topic", required=True, help="기사 주제")
     parser.add_argument("--sources", nargs="*", default=[], help="소스 파일 경로들")
+    parser.add_argument("--article-id", default="", help="source_registry article_id (소스 다양성 검사 연동)")
     parser.add_argument("--dry-run", action="store_true", help="Ghost draft까지 생성")
     parser.add_argument("--publish", action="store_true", help="실제 발행 및 뉴스레터 발송")
     args = parser.parse_args()
@@ -137,6 +143,7 @@ def main() -> None:
         args.topic,
         source_bundle,
         force_dry_run=anthropic_dry_run,
+        article_id=args.article_id,
     )
     brief_path = DRAFTS_DIR / f"brief_{ts}.json"
     brief_path.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")

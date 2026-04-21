@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-21 22:53
+# 업데이트: 2026-04-21 23:35
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -19,10 +19,8 @@ TASK_012 | 운영환경 체크 스크립트 (check_env.py) | merged
 TASK_013 | 주간 브리프 E2E 스모크 테스트 (test_e2e.py) | merged
 TASK_014 | n8n 워크플로우 import 자동화 (n8n_import.py) | merged
 TASK_015 | Ghost Webhook 자동 등록 (ghost_webhook_setup.py) | merged
-
-# ── Phase 3: 품질 게이트 · 법적 리스크 · 수익화 ──
-TASK_016 | 편집 체크리스트 자동 검증 (editorial_lint.py) | todo
-TASK_017 | PII 비식별화 파이프라인 (pii_masker.py) | todo
-TASK_018 | AI 사용 고지 자동 삽입 (disclosure_injector.py) | todo
-TASK_019 | 소스 다양성 규칙 엔진 (source_diversity.py) | todo
+TASK_016 | 편집 체크리스트 자동 검증 (editorial_lint.py) | merged
+TASK_017 | PII 비식별화 파이프라인 (pii_masker.py) | merged
+TASK_018 | AI 사용 고지 자동 삽입 (disclosure_injector.py) | merged
+TASK_019 | 소스 다양성 규칙 엔진 (source_diversity.py) | merged
 TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | todo

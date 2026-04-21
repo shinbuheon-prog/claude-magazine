@@ -17,6 +17,14 @@ try:
 except ModuleNotFoundError:
     from observability import log_usage, start_trace
 
+try:
+    from pipeline.source_diversity import check_diversity
+except ModuleNotFoundError:
+    try:
+        from source_diversity import check_diversity  # type: ignore
+    except ModuleNotFoundError:
+        check_diversity = None  # type: ignore
+
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -129,7 +137,40 @@ def _build_dry_run_brief(topic: str) -> dict:
     }
 
 
-def generate_brief(topic: str, source_bundle: str, dry_run: bool = False) -> dict:
+def _run_diversity_gate(article_id: str, strict: bool = False) -> dict | None:
+    """
+    TASK_019: 브리프 생성 전에 소스 다양성을 검사한다.
+    실패해도 기본은 경고만 찍고 계속 진행. strict=True면 sys.exit(1).
+    check_diversity import 실패 시 None 반환 (파이프라인을 깨뜨리지 않음).
+    """
+    if not article_id or check_diversity is None:
+        return None
+    try:
+        diversity = check_diversity(article_id)
+    except Exception as exc:
+        print(f"[warn] 소스 다양성 검사 실패 (skip): {exc}", file=sys.stderr)
+        return None
+
+    if not diversity["passed"]:
+        print(f"⚠️  소스 다양성: {diversity['summary']}", file=sys.stderr)
+        for rec in diversity["recommendations"]:
+            print(f"   권고: {rec}", file=sys.stderr)
+        if strict:
+            print("[strict] 소스 다양성 규칙 실패 — 발행 중단", file=sys.stderr)
+            sys.exit(1)
+    return diversity
+
+
+def generate_brief(
+    topic: str,
+    source_bundle: str,
+    dry_run: bool = False,
+    article_id: str = "",
+    strict_diversity: bool = False,
+) -> dict:
+    # TASK_019 통합: article_id가 있으면 소스 다양성 검사
+    _run_diversity_gate(article_id, strict=strict_diversity)
+
     if dry_run:
         brief = _build_dry_run_brief(topic)
         _validate_brief_schema(brief)
@@ -187,10 +228,18 @@ def main() -> None:
     parser.add_argument("--sources", nargs="*", default=[], help="소스 파일 경로들")
     parser.add_argument("--out", help="출력 JSON 파일 경로 (생략 시 stdout)")
     parser.add_argument("--dry-run", action="store_true", help="API 호출 없이 샘플 브리프 생성")
+    parser.add_argument("--article-id", dest="article_id", default="", help="소스 다양성 검사에 사용할 article_id")
+    parser.add_argument("--strict-diversity", action="store_true", help="소스 다양성 실패 시 중단 (exit 1)")
     args = parser.parse_args()
 
     source_bundle = load_sources(args.sources)
-    brief = generate_brief(args.topic, source_bundle, dry_run=args.dry_run)
+    brief = generate_brief(
+        args.topic,
+        source_bundle,
+        dry_run=args.dry_run,
+        article_id=args.article_id,
+        strict_diversity=args.strict_diversity,
+    )
     output = json.dumps(brief, ensure_ascii=False, indent=2)
 
     if args.out:
