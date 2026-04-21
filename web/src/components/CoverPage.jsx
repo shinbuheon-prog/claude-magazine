@@ -1,6 +1,24 @@
 import React from 'react';
 import { THEME } from '../theme';
 
+// 월간 커버 이미지 드롭인 경로 (TASK_021)
+// Vite 는 web/public/ 하위 파일을 빌드 시 dist/ 로 그대로 복사한다.
+const COVER_BASE = '/covers';
+const DEFAULT_COVER = `${COVER_BASE}/default.png`;
+
+/**
+ * "2026년 5월" 형식의 한국어 날짜를 "/covers/2026-05.png" 로 정규화한다.
+ * 매칭 실패 시 default.png 로 폴백.
+ */
+function resolveCoverPath(issueDate) {
+  if (typeof issueDate !== 'string') return DEFAULT_COVER;
+  const match = issueDate.match(/(\d{4})년\s*(\d{1,2})월/);
+  if (!match) return DEFAULT_COVER;
+  const yyyy = match[1];
+  const mm = String(match[2]).padStart(2, '0');
+  return `${COVER_BASE}/${yyyy}-${mm}.png`;
+}
+
 /**
  * 매거진 표지
  * props.coverData = {
@@ -19,6 +37,8 @@ const CoverPage = ({ coverData = {} }) => {
     subline = "에이전트·컨텍스트·비용 최적화 완전 분석",
     tag = "특집",
   } = coverData;
+
+  const coverSrc = resolveCoverPath(date);
 
   return (
     <div
@@ -58,14 +78,24 @@ const CoverPage = ({ coverData = {} }) => {
         </p>
       </div>
 
-      {/* 3. 우하단 비주얼 플레이스홀더 */}
+      {/* 3. 우하단 월간 커버 이미지 (TASK_021 드롭인) */}
       <div
         className="absolute bottom-0 right-0 w-[75%] h-[50%] rounded-tl-[80px] overflow-hidden border-l border-t"
         style={{ borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'rgba(255,255,255,0.04)' }}
       >
-        <div className="flex items-center justify-center h-full italic text-white/20 text-sm">
-          [ 커버 일러스트 영역 800×550px ]
-        </div>
+        <img
+          src={coverSrc}
+          alt={`${issue} ${date} 커버 일러스트`}
+          className="w-full h-full object-cover"
+          loading="eager"
+          onError={(e) => {
+            // 무한 루프 방지: 이미 default.png 로 교체된 경우 더 이상 시도하지 않는다.
+            const img = e.currentTarget;
+            if (img.dataset.fallback === '1') return;
+            img.dataset.fallback = '1';
+            img.src = DEFAULT_COVER;
+          }}
+        />
       </div>
 
       {/* 4. 하단 브랜딩 */}

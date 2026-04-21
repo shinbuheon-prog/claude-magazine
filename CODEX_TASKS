@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-21 23:35
+# 업데이트: 2026-04-22 08:32
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -24,9 +24,6 @@ TASK_017 | PII 비식별화 파이프라인 (pii_masker.py) | merged
 TASK_018 | AI 사용 고지 자동 삽입 (disclosure_injector.py) | merged
 TASK_019 | 소스 다양성 규칙 엔진 (source_diversity.py) | merged
 TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | cancelled
-# ↑ 무료 발행 확정 (2026-04-22) — 유료 구독 미도입으로 보류
-
-# ── Phase 3 확장: Claude Design 연동 (시각 자산) ──
-TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | todo
-TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | todo
+TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | merged
+TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
 TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | todo
