@@ -13,6 +13,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+try:
+    from pipeline.observability import log_usage, start_trace
+except ModuleNotFoundError:
+    from observability import log_usage, start_trace
+
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -89,6 +94,11 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
     request_id = None
     input_tokens = 0
     output_tokens = 0
+    trace = start_trace(
+        name="draft_writing",
+        model="claude-sonnet-4-6",
+        topic=str(brief.get("working_title", "")),
+    )
 
     with client.messages.stream(
         model="claude-sonnet-4-6",
@@ -106,6 +116,13 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
 
     print()
     _validate_source_markers(draft_text)
+    log_usage(
+        getattr(trace, "id", None),
+        input_tokens,
+        output_tokens,
+        "claude-sonnet-4-6",
+        request_id=request_id,
+    )
     _write_log(section_name, request_id, input_tokens, output_tokens)
     return draft_text
 

@@ -13,6 +13,11 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+try:
+    from pipeline.observability import log_usage, start_trace
+except ModuleNotFoundError:
+    from observability import log_usage, start_trace
+
 load_dotenv()
 
 ROOT = Path(__file__).parent.parent
@@ -61,6 +66,9 @@ def rewrite_for_channel(draft_text: str, channel: str) -> str:
 
     result_text = ""
     request_id = None
+    input_tokens = 0
+    output_tokens = 0
+    trace = start_trace(name="channel_rewriting", model="claude-haiku-4-5-20251001")
 
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
@@ -73,16 +81,25 @@ def rewrite_for_channel(draft_text: str, channel: str) -> str:
             print(text, end="", flush=True)
         final = stream.get_final_message()
         request_id = getattr(final, "_request_id", None)
+        input_tokens = final.usage.input_tokens
+        output_tokens = final.usage.output_tokens
 
     print()
+    log_usage(
+        getattr(trace, "id", None),
+        input_tokens,
+        output_tokens,
+        "claude-haiku-4-5-20251001",
+        request_id=request_id,
+    )
 
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "request_id": request_id,
         "model": "claude-haiku-4-5-20251001",
         "channel": channel,
-        "input_tokens": final.usage.input_tokens,
-        "output_tokens": final.usage.output_tokens,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
     }
     log_file = LOGS_DIR / f"rewrite_{channel}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     log_file.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")

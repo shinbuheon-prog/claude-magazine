@@ -6,7 +6,6 @@
 """
 import argparse
 import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline.brief_generator import generate_brief, load_sources
 from pipeline.draft_writer import write_section
+from pipeline.ghost_client import create_post
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,31 +27,7 @@ DRAFTS_DIR.mkdir(exist_ok=True)
 def publish_to_ghost(title: str, html_content: str, dry_run: bool = True) -> dict:
     """Ghost Admin API로 포스트 생성"""
     try:
-        import jwt, requests, time
-
-        key = os.environ["GHOST_ADMIN_API_KEY"]
-        api_url = os.environ["GHOST_ADMIN_API_URL"]
-        kid, secret = key.split(":")
-        iat = int(time.time())
-        token = jwt.encode(
-            {"iat": iat, "exp": iat + 300, "aud": "/admin/"},
-            bytes.fromhex(secret),
-            algorithm="HS256",
-            headers={"kid": kid},
-        )
-        headers = {"Authorization": f"Ghost {token}"}
-        payload = {
-            "posts": [{
-                "title": title,
-                "html": html_content,
-                "status": "draft" if dry_run else "published",
-                "visibility": "public",
-            }]
-        }
-        r = requests.post(f"{api_url}/ghost/api/admin/posts/", json=payload, headers=headers)
-        r.raise_for_status()
-        post = r.json()["posts"][0]
-        return {"post_id": post["id"], "url": post["url"], "status": post["status"]}
+        return create_post(title, html_content, status="draft" if dry_run else "published")
     except Exception as e:
         print(f"[Ghost 오류] {e}", file=sys.stderr)
         return {"error": str(e)}

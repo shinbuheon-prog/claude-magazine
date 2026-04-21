@@ -14,6 +14,11 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
+try:
+    from pipeline.observability import log_usage, start_trace
+except ModuleNotFoundError:
+    from observability import log_usage, start_trace
+
 # Windows 환경에서 한국어/특수문자 출력을 위한 UTF-8 강제 설정
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -68,6 +73,9 @@ def run_factcheck(draft_text: str, source_bundle: str) -> str:
 
     result_text = ""
     request_id = None
+    input_tokens = 0
+    output_tokens = 0
+    trace = start_trace(name="fact_checking", model="claude-opus-4-7")
 
     with client.messages.stream(
         model="claude-opus-4-7",
@@ -80,15 +88,24 @@ def run_factcheck(draft_text: str, source_bundle: str) -> str:
             print(text, end="", flush=True)
         final = stream.get_final_message()
         request_id = getattr(final, "_request_id", None)
+        input_tokens = final.usage.input_tokens
+        output_tokens = final.usage.output_tokens
 
     print()
+    log_usage(
+        getattr(trace, "id", None),
+        input_tokens,
+        output_tokens,
+        "claude-opus-4-7",
+        request_id=request_id,
+    )
 
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "request_id": request_id,
         "model": "claude-opus-4-7",
-        "input_tokens": final.usage.input_tokens,
-        "output_tokens": final.usage.output_tokens,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
     }
     log_file = LOGS_DIR / f"factcheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     log_file.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")

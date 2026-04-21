@@ -12,6 +12,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+try:
+    from pipeline.observability import log_usage, start_trace
+except ModuleNotFoundError:
+    from observability import log_usage, start_trace
+
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -148,6 +153,7 @@ def generate_brief(topic: str, source_bundle: str, dry_run: bool = False) -> dic
     request_id = None
     input_tokens = 0
     output_tokens = 0
+    trace = start_trace(name="brief_generation", model="claude-sonnet-4-6", topic=topic)
 
     with client.messages.stream(
         model="claude-sonnet-4-6",
@@ -164,6 +170,13 @@ def generate_brief(topic: str, source_bundle: str, dry_run: bool = False) -> dic
 
     brief = _extract_json_block(result_text)
     _validate_brief_schema(brief)
+    log_usage(
+        getattr(trace, "id", None),
+        input_tokens,
+        output_tokens,
+        "claude-sonnet-4-6",
+        request_id=request_id,
+    )
     _write_log(topic, request_id, input_tokens, output_tokens)
     return brief
 
