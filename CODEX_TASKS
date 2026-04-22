@@ -39,3 +39,9 @@ TASK_030 | 매거진 전용 Claude Code Skills 정의 (.claude/skills/) | merged
 TASK_031 | Git Worktree 기반 Agent 병렬 위임 표준화 (AGENTS.md 확장) | merged
 TASK_032 | 소스 자동 수집 파이프라인 RSS·Atom (source_ingester.py) | merged
 TASK_033 | Claude Agent SDK 통합 — Max 구독 경유로 API 비용 0 | merged
+
+# ── Phase 5 확장: 80페이지 매거진 발행 체계 ──
+TASK_034 | 매거진 추가 컴포넌트 (TOC·Editorial·Colophon) | merged
+TASK_035 | 80페이지 월간 PDF 컴파일러 (compile_monthly_pdf.py) | merged
+TASK_036 | 월간 플랜 관리 CLI (plan_issue.py) | merged
+TASK_037 | 월간 발행 원스톱 + 대시보드 진행률 위젯 | merged

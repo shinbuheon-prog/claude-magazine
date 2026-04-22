@@ -5,6 +5,9 @@ import InsightPage from './components/InsightPage';
 import InterviewPage from './components/InterviewPage';
 import ReviewPage from './components/ReviewPage';
 import FeaturePage from './components/FeaturePage';
+import TOCPage from './components/TOCPage';
+import EditorialPage from './components/EditorialPage';
+import ColophonPage from './components/ColophonPage';
 import DashboardPage from './pages/DashboardPage';
 import DraftListPage from './pages/admin/DraftListPage';
 import DraftReviewPage from './pages/admin/DraftReviewPage';
@@ -131,7 +134,7 @@ const SAMPLE_FEATURE = {
   sourceIds: ['src-001', 'src-003', 'src-interview-001', 'src-review-001'],
 };
 
-const PAGES = ['표지', '기사', '인사이트', '인터뷰', '리뷰', '특집', '대시보드'];
+const PAGES = ['표지', '목차', '편집자의 말', '기사', '인사이트', '인터뷰', '리뷰', '특집', '콜로폰', '대시보드'];
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
@@ -191,6 +194,15 @@ export default function App() {
           <CoverPage coverData={SAMPLE_COVER} />
         </div>
         <div className="print-page">
+          <TOCPage tocData={{}} />
+        </div>
+        <div className="print-page">
+          <EditorialPage editorialData={{}} />
+        </div>
+        <div className="print-page">
+          <FeaturePage featureData={SAMPLE_FEATURE} />
+        </div>
+        <div className="print-page">
           <ArticlePage pageData={SAMPLE_ARTICLE} />
         </div>
         <div className="print-page">
@@ -203,7 +215,7 @@ export default function App() {
           <ReviewPage reviewData={SAMPLE_REVIEW} />
         </div>
         <div className="print-page">
-          <FeaturePage featureData={SAMPLE_FEATURE} />
+          <ColophonPage colophonData={{}} />
         </div>
       </div>
     );
@@ -226,11 +238,14 @@ export default function App() {
       </div>
 
       {page === '표지' && <CoverPage coverData={SAMPLE_COVER} />}
+      {page === '목차' && <TOCPage tocData={{}} />}
+      {page === '편집자의 말' && <EditorialPage editorialData={{}} />}
       {page === '기사' && <ArticlePage pageData={SAMPLE_ARTICLE} />}
       {page === '인사이트' && <InsightPage insightData={SAMPLE_INSIGHT} />}
       {page === '인터뷰' && <InterviewPage interviewData={SAMPLE_INTERVIEW} />}
       {page === '리뷰' && <ReviewPage reviewData={SAMPLE_REVIEW} />}
       {page === '특집' && <FeaturePage featureData={SAMPLE_FEATURE} />}
+      {page === '콜로폰' && <ColophonPage colophonData={{}} />}
       {page === '대시보드' && <DashboardPage />}
     </div>
   );

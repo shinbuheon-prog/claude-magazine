@@ -335,6 +335,142 @@ export default function DashboardPage() {
           </table>
         </div>
       </Panel>
+
+      {/* TASK_037: 월간 발행 진행률 위젯 */}
+      <MonthlyProgressWidget />
     </div>
+  );
+}
+
+// ── 월간 발행 진행률 위젯 (TASK_037) ─────────────────
+function MonthlyProgressWidget() {
+  const [plan, setPlan] = useState(null);
+  const [error, setError] = useState(null);
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  useEffect(() => {
+    // 정적 JSON 경로에서 로드 (compile_monthly_pdf.py가 생성)
+    fetch(`/issue/${month}.json`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
+      .then(setPlan)
+      .catch((e) => setError(e.message));
+  }, [month]);
+
+  const counts = useMemo(() => {
+    if (!plan?.articles) return {};
+    const c = {};
+    plan.articles.forEach((a) => {
+      const s = a.status || 'planning';
+      c[s] = (c[s] || 0) + 1;
+    });
+    return c;
+  }, [plan]);
+
+  const total = plan?.articles?.length || 0;
+  const published = counts.published || 0;
+  const progressPct = total ? (published / total) * 100 : 0;
+
+  const statusOrder = [
+    ['published', '발행 완료', '#10B981'],
+    ['approved', '승인 대기', '#059669'],
+    ['lint', 'lint', '#FBBF24'],
+    ['fact_check', '팩트체크', '#F97316'],
+    ['draft', '초안', '#3B82F6'],
+    ['brief', '브리프', '#9CA3AF'],
+    ['planning', '기획', '#6B7280'],
+  ];
+
+  return (
+    <Panel title={`월간 발행 진행률 — ${month}`} kicker="TASK_037">
+      <div className="mb-4 flex items-center gap-3">
+        <input
+          type="text"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          placeholder="YYYY-MM"
+          className="rounded-lg border border-gray-200 px-3 py-1 text-sm"
+        />
+        {plan && <span className="text-xs text-gray-500">{plan.theme}</span>}
+      </div>
+
+      {error && (
+        <p className="text-sm text-gray-400">
+          이슈 JSON 없음 (<code>/issue/{month}.json</code>) — compile_monthly_pdf.py로 먼저 생성하세요.
+        </p>
+      )}
+
+      {plan && (
+        <>
+          <div className="mb-6">
+            <div className="mb-1 flex justify-between text-xs text-gray-500">
+              <span>Progress</span>
+              <span>
+                {published}/{total} published · {progressPct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full transition-all"
+                style={{ width: `${progressPct}%`, backgroundColor: THEME.accent }}
+              />
+            </div>
+          </div>
+
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+            {statusOrder.map(([key, label, color]) => (
+              <div key={key} className="rounded-2xl border border-gray-100 p-3">
+                <p className="text-xs text-gray-400">{label}</p>
+                <p className="mt-1 text-2xl font-black" style={{ color }}>
+                  {counts[key] || 0}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-gray-500">
+                  <th className="px-3 py-2">Slug</th>
+                  <th className="px-3 py-2">카테고리</th>
+                  <th className="px-3 py-2">페이지</th>
+                  <th className="px-3 py-2">담당</th>
+                  <th className="px-3 py-2">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.articles.map((a) => (
+                  <tr key={a.slug} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-semibold">{a.slug}</td>
+                    <td className="px-3 py-2">{a.category}</td>
+                    <td className="px-3 py-2">{a.target_pages}p</td>
+                    <td className="px-3 py-2 text-gray-500">{a.assignee || '-'}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-xs"
+                        style={{
+                          backgroundColor:
+                            statusOrder.find(([k]) => k === a.status)?.[2] + '22' || '#f3f4f6',
+                          color:
+                            statusOrder.find(([k]) => k === a.status)?.[2] || '#6b7280',
+                        }}
+                      >
+                        {a.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Panel>
   );
 }

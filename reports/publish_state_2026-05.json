@@ -1,0 +1,17 @@
+{
+  "month": "2026-05",
+  "stages": {
+    "plan_loaded": true,
+    "article_count": 2,
+    "quality_gate": {
+      "passed": 0,
+      "failed": 2,
+      "errors": [
+        "agent-economics: status=planning (승인 미완료)",
+        "claude-code-review: status=draft (승인 미완료)"
+      ]
+    },
+    "disclosure_injected": true
+  },
+  "last_updated": "2026-04-22T05:46:49.478603+00:00"
+}
