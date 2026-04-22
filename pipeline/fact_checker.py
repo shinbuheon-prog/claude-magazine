@@ -28,10 +28,15 @@ except ModuleNotFoundError:
         def inject_heuristics(category: str, max_examples: int = 10) -> str:
             return ""
 
-# Windows 환경에서 한국어/특수문자 출력을 위한 UTF-8 강제 설정
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Windows UTF-8 래핑 가드 — 다중 모듈 import 시 재래핑하면 closed file 에러 발생.
+if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        sys.stdout._utf8_wrapped = True  # type: ignore[attr-defined]
+        sys.stderr._utf8_wrapped = True  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass
 
 load_dotenv()
 
@@ -65,7 +70,13 @@ def load_sources_for_article(article_id: str | None) -> str:
 
 
 def run_factcheck(draft_text: str, source_bundle: str, category: str = "all") -> str:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    # TASK_033: provider 추상화 (CLAUDE_PROVIDER=sdk면 Max 구독 Opus 경유)
+    try:
+        from pipeline.claude_provider import get_provider
+    except ModuleNotFoundError:
+        from claude_provider import get_provider  # type: ignore
+
+    provider = get_provider()
     template = load_template()
     heuristics_block = inject_heuristics(category)
 
@@ -83,32 +94,34 @@ def run_factcheck(draft_text: str, source_bundle: str, category: str = "all") ->
         .replace("{{source_bundle}}", source_bundle)
     )
 
-    result_text = ""
-    request_id = None
-    input_tokens = 0
-    output_tokens = 0
-    trace = start_trace(name="fact_checking", model="claude-opus-4-7")
+    trace = start_trace(name="fact_checking", model=f"opus-via-{provider.name}")
 
-    with client.messages.stream(
-        model="claude-opus-4-7",
-        max_tokens=8000,
+    # 스트리밍 콜백: 실시간 출력 (cp949 크래시 방지로 flush만)
+    def _stream_print(chunk: str) -> None:
+        try:
+            print(chunk, end="", flush=True)
+        except UnicodeEncodeError:
+            pass  # Windows cp949 특수문자 실패 시 stdout은 skip, 최종 저장은 정상
+
+    result = provider.stream_complete(
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            result_text += text
-            print(text, end="", flush=True)
-        final = stream.get_final_message()
-        request_id = getattr(final, "_request_id", None)
-        input_tokens = final.usage.input_tokens
-        output_tokens = final.usage.output_tokens
+        user=user_prompt,
+        model_tier="opus",
+        max_tokens=8000,
+        stream_callback=_stream_print,
+    )
 
     print()
+    result_text = result.text
+    request_id = result.request_id
+    input_tokens = result.input_tokens
+    output_tokens = result.output_tokens
+
     log_usage(
         getattr(trace, "id", None),
         input_tokens,
         output_tokens,
-        "claude-opus-4-7",
+        result.model or "claude-opus-4-7",
         request_id=request_id,
     )
 

@@ -44,48 +44,43 @@ STANCE_VALUES = {"pro", "neutral", "con", "unknown"}
 def classify_stance(source_text: str, topic: str) -> str:
     """
     Haiku 4.5 호출 → pro | neutral | con | unknown 반환.
-    ANTHROPIC_API_KEY 없거나 호출 실패 시 'unknown'을 반환한다 (예외 전파 금지).
+    provider 경로 자동 선택 (CLAUDE_PROVIDER=sdk면 Max 구독).
+    호출 실패 시 'unknown'을 반환한다 (예외 전파 금지).
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return "unknown"
     if not (source_text or "").strip():
         return "unknown"
 
-    try:
-        from anthropic import Anthropic
-    except ImportError:
+    # API provider 사용 시에만 API 키 체크 (SDK는 키 불필요)
+    kind = (os.environ.get("CLAUDE_PROVIDER", "api")).lower()
+    if kind == "api" and not os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return "unknown"
 
     try:
-        client = Anthropic(api_key=api_key)
+        try:
+            from pipeline.claude_provider import get_provider
+        except ModuleNotFoundError:
+            from claude_provider import get_provider  # type: ignore
+
+        provider = get_provider()
         system_prompt = (
             "당신은 기술·정책 뉴스의 관점 분류기다.\n"
             "제공된 문서가 주어진 주제에 대해 찬성(pro), 중립(neutral), 반대(con) 중 어느 관점인지 한 단어로만 답하라.\n"
             "판단이 불가능하면 'unknown'을 출력하라.\n"
             "출력 형식: pro | neutral | con | unknown 중 하나의 소문자 단어. 다른 텍스트·설명 금지."
         )
-        # 긴 원문 방지: 8000자로 잘라 전달
         preview = source_text[:8000]
         user_prompt = f"주제: {topic or '(미지정)'}\n\n--- 문서 ---\n{preview}"
 
-        result_text = ""
-        request_id = None
-        with client.messages.stream(
-            model=HAIKU_MODEL,
-            max_tokens=16,
+        result = provider.stream_complete(
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                result_text += chunk
-            final = stream.get_final_message()
-            request_id = getattr(final, "_request_id", None)
+            user=user_prompt,
+            model_tier="haiku",
+            max_tokens=16,
+        )
 
-        _write_classify_log(topic, request_id, result_text)
+        _write_classify_log(topic, result.request_id, result.text)
 
-        token = result_text.strip().lower().split()[0] if result_text.strip() else ""
-        # 꼬리표 제거 (예: "pro.", "neutral,")
+        token = result.text.strip().lower().split()[0] if result.text.strip() else ""
         token = token.strip(".,;:\"'`")
         if token in STANCE_VALUES:
             return token

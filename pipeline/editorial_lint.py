@@ -23,10 +23,15 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-# Windows 환경에서 한국어/특수문자 출력을 위한 UTF-8 강제 설정 (fact_checker.py 패턴)
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Windows UTF-8 래핑 가드 — 다중 모듈 import 시 재래핑하면 closed file 에러 발생.
+if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        sys.stdout._utf8_wrapped = True  # type: ignore[attr-defined]
+        sys.stderr._utf8_wrapped = True  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):
+        pass
 
 load_dotenv()
 
@@ -234,8 +239,10 @@ def check_title_body_match(text: str) -> dict[str, Any]:
             "message": "본문이 비어 있음",
         }
 
+    # TASK_033: provider 추상화 (SDK/API/mock 자동 선택)
+    kind = (os.getenv("CLAUDE_PROVIDER", "api")).lower()
     api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
+    if kind == "api" and not api_key:
         return {
             "id": "title-body-match",
             "status": "warn",
@@ -243,16 +250,12 @@ def check_title_body_match(text: str) -> dict[str, Any]:
         }
 
     try:
-        import anthropic  # noqa: WPS433 — 선택 의존성
-    except ImportError:
-        return {
-            "id": "title-body-match",
-            "status": "warn",
-            "message": "anthropic 패키지 미설치 — skip",
-        }
+        try:
+            from pipeline.claude_provider import get_provider
+        except ModuleNotFoundError:
+            from claude_provider import get_provider  # type: ignore
 
-    try:
-        client = anthropic.Anthropic(api_key=api_key, timeout=NETWORK_TIMEOUT)
+        provider = get_provider()
         body_excerpt = body[:2000]
         system_prompt = (
             "너는 한국어 기사 편집자다. 제목과 본문의 일치도를 0~100 점수로만 출력하라. "
@@ -260,15 +263,14 @@ def check_title_body_match(text: str) -> dict[str, Any]:
             "반드시 정수 한 개만 출력 (예: 87)."
         )
         user_prompt = f"[제목]\n{title}\n\n[본문 발췌]\n{body_excerpt}"
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=100,
+
+        result = provider.stream_complete(
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            user=user_prompt,
+            model_tier="sonnet",
+            max_tokens=100,
         )
-        reply = "".join(
-            block.text for block in message.content if getattr(block, "type", None) == "text"
-        ).strip()
+        reply = (result.text or "").strip()
         score_match = re.search(r"\d{1,3}", reply)
         if not score_match:
             return {
@@ -284,7 +286,7 @@ def check_title_body_match(text: str) -> dict[str, Any]:
             "message": f"일치도 {score}점",
             "score": score,
         }
-    except Exception as exc:  # pragma: no cover — 네트워크 실패 포함
+    except Exception as exc:
         return {
             "id": "title-body-match",
             "status": "warn",

@@ -241,7 +241,13 @@ def _haiku_rewrite(draft_text: str, channel: str) -> str:
     except ModuleNotFoundError:
         from observability import log_usage, start_trace  # type: ignore
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    # TASK_033: provider 추상화
+    try:
+        from pipeline.claude_provider import get_provider
+    except ModuleNotFoundError:
+        from claude_provider import get_provider  # type: ignore
+
+    provider = get_provider()
 
     system_prompt = (
         "당신은 SNS·이메일 콘텐츠 전문가다.\n"
@@ -255,32 +261,32 @@ def _haiku_rewrite(draft_text: str, channel: str) -> str:
         f"<draft>\n{draft_text}\n</draft>"
     )
 
-    result_text = ""
-    request_id = None
-    input_tokens = 0
-    output_tokens = 0
-    trace = start_trace(name="channel_rewriting", model="claude-haiku-4-5-20251001")
+    trace = start_trace(name="channel_rewriting", model=f"haiku-via-{provider.name}")
 
-    with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2000,
+    def _stream_print(chunk: str) -> None:
+        try:
+            print(chunk, end="", flush=True)
+        except UnicodeEncodeError:
+            pass
+
+    result = provider.stream_complete(
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            result_text += text
-            print(text, end="", flush=True)
-        final = stream.get_final_message()
-        request_id = getattr(final, "_request_id", None)
-        input_tokens = final.usage.input_tokens
-        output_tokens = final.usage.output_tokens
-
+        user=user_prompt,
+        model_tier="haiku",
+        max_tokens=2000,
+        stream_callback=_stream_print,
+    )
     print()
+    result_text = result.text
+    request_id = result.request_id
+    input_tokens = result.input_tokens
+    output_tokens = result.output_tokens
+
     log_usage(
         getattr(trace, "id", None),
         input_tokens,
         output_tokens,
-        "claude-haiku-4-5-20251001",
+        result.model or "claude-haiku-4-5-20251001",
         request_id=request_id,
     )
 

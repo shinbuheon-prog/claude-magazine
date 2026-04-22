@@ -151,41 +151,46 @@ def classify_entry(title: str, summary: str, feed_config: dict[str, Any]) -> dic
         "classified_by": "default",
     }
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    # API provider 사용 시에만 API 키 체크 (SDK·mock은 불필요)
+    kind = (os.environ.get("CLAUDE_PROVIDER", "api")).lower()
+    if kind == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
         return result
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        try:
+            from pipeline.claude_provider import get_provider
+        except ModuleNotFoundError:
+            from claude_provider import get_provider  # type: ignore
 
-        prompt = (
+        provider = get_provider()
+
+        system_prompt = "JSON으로만 답하고 다른 텍스트는 출력하지 않는다."
+        user_prompt = (
             f"다음 피드 entry를 분류하세요.\n\n"
             f"피드: {feed_config.get('name', '')}\n"
             f"기본 토픽: {', '.join(default_topics)}\n\n"
             f"제목: {title}\n"
             f"요약: {summary[:300]}\n\n"
-            f"JSON으로만 답하세요 (다른 텍스트 금지):\n"
+            f"다음 JSON 형태로만 답하세요:\n"
             f'{{"topics": ["topic1","topic2"], "relevance": 0.0~1.0}}'
         )
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        resp = provider.stream_complete(
+            system=system_prompt,
+            user=user_prompt,
+            model_tier="haiku",
             max_tokens=150,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        text = response.content[0].text if response.content else "{}"
-        # JSON 추출
+        text = resp.text or "{}"
         import re
         match = re.search(r"\{[^}]+\}", text)
         if match:
             parsed = json.loads(match.group(0))
             result["topics"] = parsed.get("topics", default_topics)
             result["relevance_score"] = float(parsed.get("relevance", 0.5))
-            result["classified_by"] = "haiku"
+            result["classified_by"] = f"haiku-via-{resp.provider}"
     except Exception as exc:
-        # Haiku 실패 시 default 유지
         print(f"[warn] 분류 실패 ({title[:40]}...): {exc}", file=sys.stderr)
 
     return result

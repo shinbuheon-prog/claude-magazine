@@ -83,9 +83,13 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
         _write_log(section_name, "dry-run", 0, 0)
         return draft_text
 
-    from anthropic import Anthropic
+    # TASK_033: provider 추상화
+    try:
+        from pipeline.claude_provider import get_provider
+    except ModuleNotFoundError:
+        from claude_provider import get_provider  # type: ignore
 
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    provider = get_provider()
     template = load_template()
     heuristics_block = inject_heuristics(str(brief.get("category") or "all"))
     system_prompt = (
@@ -102,40 +106,37 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
         .replace("{{source_bundle}}", source_bundle or "(소스 묶음 없음)")
     )
 
-    draft_text = ""
-    request_id = None
-    input_tokens = 0
-    output_tokens = 0
     trace = start_trace(
         name="draft_writing",
-        model="claude-sonnet-4-6",
+        model=f"sonnet-via-{provider.name}",
         topic=str(brief.get("working_title", "")),
     )
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=6000,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            draft_text += text
-            print(text, end="", flush=True)
-        final = stream.get_final_message()
-        request_id = getattr(final, "_request_id", None)
-        input_tokens = final.usage.input_tokens
-        output_tokens = final.usage.output_tokens
+    def _stream_print(chunk: str) -> None:
+        try:
+            print(chunk, end="", flush=True)
+        except UnicodeEncodeError:
+            pass  # Windows cp949 특수문자 skip
 
+    result = provider.stream_complete(
+        system=system_prompt,
+        user=user_prompt,
+        model_tier="sonnet",
+        max_tokens=6000,
+        stream_callback=_stream_print,
+    )
     print()
+    draft_text = result.text
+
     _validate_source_markers(draft_text)
     log_usage(
         getattr(trace, "id", None),
-        input_tokens,
-        output_tokens,
-        "claude-sonnet-4-6",
-        request_id=request_id,
+        result.input_tokens,
+        result.output_tokens,
+        result.model or "claude-sonnet-4-6",
+        request_id=result.request_id,
     )
-    _write_log(section_name, request_id, input_tokens, output_tokens)
+    _write_log(section_name, result.request_id, result.input_tokens, result.output_tokens)
     return draft_text
 
 

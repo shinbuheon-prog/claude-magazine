@@ -188,9 +188,13 @@ def generate_brief(
         _write_log(topic, "dry-run", 0, 0)
         return brief
 
-    from anthropic import Anthropic
+    # TASK_033: provider 추상화 (CLAUDE_PROVIDER=sdk면 Max 구독 경유, 추가 비용 0)
+    try:
+        from pipeline.claude_provider import get_provider
+    except ModuleNotFoundError:
+        from claude_provider import get_provider  # type: ignore
 
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    provider = get_provider()
     template = load_template()
     heuristics_block = inject_heuristics(category)
 
@@ -204,36 +208,26 @@ def generate_brief(
         system_prompt += "\n\n" + heuristics_block
     user_prompt = template.replace("{{topic}}", topic).replace("{{source_bundle}}", source_bundle)
 
-    result_text = ""
-    request_id = None
-    input_tokens = 0
-    output_tokens = 0
-    trace = start_trace(name="brief_generation", model="claude-sonnet-4-6", topic=topic)
+    trace = start_trace(name="brief_generation", model=f"sonnet-via-{provider.name}", topic=topic)
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
+    result = provider.stream_complete(
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for text in stream.text_stream:
-            result_text += text
-        final = stream.get_final_message()
-        request_id = getattr(final, "_request_id", None)
-        input_tokens = final.usage.input_tokens
-        output_tokens = final.usage.output_tokens
+        user=user_prompt,
+        model_tier="sonnet",
+        max_tokens=4096,
+    )
 
-    brief = _extract_json_block(result_text)
+    brief = _extract_json_block(result.text)
     brief.setdefault("category", category)
     _validate_brief_schema(brief)
     log_usage(
         getattr(trace, "id", None),
-        input_tokens,
-        output_tokens,
-        "claude-sonnet-4-6",
-        request_id=request_id,
+        result.input_tokens,
+        result.output_tokens,
+        result.model or "claude-sonnet-4-6",
+        request_id=result.request_id,
     )
-    _write_log(topic, request_id, input_tokens, output_tokens)
+    _write_log(topic, result.request_id, result.input_tokens, result.output_tokens)
     return brief
 
 

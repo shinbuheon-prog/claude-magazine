@@ -189,16 +189,21 @@ def analyze_and_propose(failures: dict[str, Any]) -> dict[str, Any]:
         "notes": str,
     }
     """
+    # TASK_033: provider 추상화 (CLAUDE_PROVIDER=sdk면 Max 구독, 추가 비용 0)
+    kind = (os.environ.get("CLAUDE_PROVIDER", "api")).lower()
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("[warn] ANTHROPIC_API_KEY 미설정 — Opus 호출 skip, 빈 제안 반환", file=sys.stderr)
-        return _empty_response("ANTHROPIC_API_KEY 미설정으로 Opus 분석 생략됨")
+    if kind == "api" and not api_key:
+        print("[warn] ANTHROPIC_API_KEY 미설정 — Sonnet 호출 skip, 빈 제안 반환", file=sys.stderr)
+        return _empty_response("ANTHROPIC_API_KEY 미설정으로 분석 생략됨")
 
     try:
-        import anthropic  # noqa: WPS433 — 선택 의존성
+        try:
+            from pipeline.claude_provider import get_provider
+        except ModuleNotFoundError:
+            from claude_provider import get_provider  # type: ignore
     except ImportError:
-        print("[warn] anthropic 패키지 미설치 — skip", file=sys.stderr)
-        return _empty_response("anthropic 패키지 미설치")
+        print("[warn] claude_provider import 실패 — skip", file=sys.stderr)
+        return _empty_response("claude_provider 미구현")
 
     user_prompt = (
         "아래는 최근 실패 통계 JSON이다. SYSTEM에 명시한 스키마대로만 응답하라.\n\n"
@@ -215,38 +220,36 @@ def analyze_and_propose(failures: dict[str, Any]) -> dict[str, Any]:
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-            with client.messages.stream(
-                model=MODEL,
-                max_tokens=MAX_TOKENS,
+            provider = get_provider()
+            # MODEL 상수는 tier 문자열 ("sonnet"). 하위 호환: 풀네임이면 자동 추출.
+            tier = "sonnet"
+            if "opus" in MODEL:
+                tier = "opus"
+            elif "haiku" in MODEL:
+                tier = "haiku"
+
+            result = provider.stream_complete(
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_prompt}],
-            ) as stream:
-                for chunk in stream.text_stream:
-                    result_text += chunk
-                final = stream.get_final_message()
-                request_id = (
-                    getattr(final, "_request_id", None)
-                    or getattr(stream, "_request_id", None)
-                    or getattr(final, "id", None)
-                )
-                try:
-                    input_tokens = final.usage.input_tokens
-                    output_tokens = final.usage.output_tokens
-                except AttributeError:
-                    pass
+                user=user_prompt,
+                model_tier=tier,
+                max_tokens=MAX_TOKENS,
+            )
+            result_text = result.text
+            request_id = result.request_id
+            input_tokens = result.input_tokens
+            output_tokens = result.output_tokens
             break
-        except Exception as exc:  # pragma: no cover — 네트워크
+        except Exception as exc:
             last_error = exc
             print(
-                f"[warn] Opus 호출 실패 (attempt {attempt}/{MAX_RETRIES}): {type(exc).__name__}: {exc}",
+                f"[warn] 분석 호출 실패 (attempt {attempt}/{MAX_RETRIES}): {type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_WAIT_SECONDS)
 
     if last_error is not None and not result_text:
-        return _empty_response(f"Opus 호출 {MAX_RETRIES}회 실패: {type(last_error).__name__}")
+        return _empty_response(f"호출 {MAX_RETRIES}회 실패: {type(last_error).__name__}")
 
     parsed = _extract_json(result_text)
     if not parsed:
