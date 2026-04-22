@@ -44,6 +44,62 @@
 
 ---
 
+## Worktree 격리 원칙 (TASK_031)
+
+**병렬 Agent 위임 시 권장**: 각 Agent가 별도 git worktree에서 작업해 파일 충돌 방지.
+
+### 언제 worktree 격리 필요
+- 2개 이상 Agent가 병렬로 동일 저장소 수정 시
+- 공유 파일(App.jsx, requirements.txt, .env.example, CODEX_TASKS 등) 편집 가능성 있을 때
+- 대규모 리팩토링 병렬 진행
+
+### 언제 불필요
+- 단일 Agent 작업
+- Agent가 서로 완전히 다른 폴더만 건드릴 때 (예: web/ vs pipeline/)
+- 빠른 수정·문서만 변경
+
+### Worktree 사용 패턴 (Agent tool)
+```
+Agent({
+  description: "...",
+  isolation: "worktree",   ← 병렬 위임 시 지정
+  prompt: "..."
+})
+```
+완료 시 변경사항은 별도 브랜치에 커밋됨. 사람이 리뷰·머지.
+
+### 병렬 위임 표준 체크리스트
+
+**위임 전:**
+- [ ] 동일 파일 충돌 가능성 분석
+- [ ] 2개 이상 병렬 시 `isolation: "worktree"` 지정
+- [ ] 각 Agent에게 "건드리지 말 파일" 명시
+
+**위임 프롬프트 공통 항목:**
+- 읽어야 할 파일 순서
+- 수정 금지 파일 목록
+- 스모크 테스트 명령어
+- 완료 처리 명령어 (`python codex_workflow.py update TASK_XXX implemented`)
+
+**완료 후:**
+- [ ] 각 Agent의 변경사항 검증
+- [ ] 충돌 있으면 수동 해결 (`git merge --no-ff`)
+- [ ] 통합 스모크 테스트
+
+### 실제 사례
+
+**TASK_021 + TASK_022 (worktree 불필요)**
+- TASK_021: `web/public/covers/` + CoverPage.jsx
+- TASK_022: App.jsx + 신규 3 컴포넌트
+- 공유 파일 충돌: 없음 (다른 파일)
+- 대책: 각 Agent에게 상호 수정 금지 명시만으로 충분
+
+**TASK_016 + 017 + 018 + 019 (4개 병렬)**
+- 각기 다른 pipeline/ 파일 수정
+- requirements.txt·editorial_checklist.md 공유 가능성 있어 worktree 권장 케이스
+
+---
+
 ## 태스크별 핵심 파일
 
 | TASK | 생성/수정할 파일 | 테스트 커맨드 |
