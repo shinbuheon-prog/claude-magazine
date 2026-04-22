@@ -49,6 +49,7 @@ CHECK_IDS = [
     "correction-policy",
     "request-id-log",
 ]
+OPTIONAL_CHECK_IDS = CHECK_IDS + ["article-standards"]
 
 STATUS_ICON = {"pass": "✅", "fail": "❌", "warn": "⚠️ ", "skip": "➖"}
 
@@ -713,6 +714,7 @@ def lint_draft(
     article_id: str | None = None,
     text_override: str | None = None,
     ghost_post_id: str | None = None,
+    category: str | None = None,
 ) -> dict:
     """편집 체크리스트 10개 항목 검증.
 
@@ -749,6 +751,15 @@ def lint_draft(
             }
         items.append(result)
 
+    if category and (only is None or "article-standards" in selected):
+        items.append(
+            _check_article_standards(
+                draft_path=draft_path,
+                category=category,
+                article_id=article_id,
+            )
+        )
+
     passed = sum(1 for it in items if it["status"] == "pass")
     failed = sum(1 for it in items if it["status"] == "fail")
     warnings = sum(1 for it in items if it["status"] in ("warn", "skip"))
@@ -781,6 +792,49 @@ def fetch_ghost_post_html(post_id: str) -> tuple[str, str]:
     response = _request("GET", f"/posts/{post_id}/", params={"formats": "html"})
     post = response["posts"][0]
     return post.get("title", ""), post.get("html", "")
+
+
+def _check_article_standards(
+    *,
+    draft_path: str,
+    category: str,
+    article_id: str | None,
+) -> dict[str, Any]:
+    try:
+        try:
+            from pipeline.standards_checker import check_article
+        except ModuleNotFoundError:
+            from standards_checker import check_article  # type: ignore
+    except ImportError:
+        return {
+            "id": "article-standards",
+            "status": "warn",
+            "message": "standards_checker missing - skipped",
+        }
+
+    try:
+        result = check_article(draft_path, category, metadata={"article_id": article_id})
+    except Exception as exc:
+        return {
+            "id": "article-standards",
+            "status": "warn",
+            "message": f"standards_checker failed - skipped ({type(exc).__name__}: {exc})",
+        }
+
+    failed_ids = [
+        item["id"]
+        for item in (result["common_checks"] + result["category_checks"])
+        if item["status"] != "pass"
+    ]
+    return {
+        "id": "article-standards",
+        "status": "pass" if result["can_publish"] else "fail",
+        "message": (
+            f"category={category} must_pass {result['must_pass_passed']}/{result['must_pass_total']}, "
+            f"should_pass {result['should_pass_passed']}/{result['should_pass_total']}"
+        ),
+        "details": failed_ids[:5] if failed_ids else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -825,10 +879,11 @@ def main() -> int:
     parser.add_argument("--draft", help="초안 마크다운 파일 경로")
     parser.add_argument("--ghost-post-id", help="Ghost 포스트 ID")
     parser.add_argument("--article-id", help="source_registry 조회용 article_id (선택)")
+    parser.add_argument("--category", help="article_standards category (optional)")
     parser.add_argument(
         "--only",
         nargs="+",
-        help=f"특정 체크 항목만 실행. 가능: {', '.join(CHECK_IDS)}",
+        help=f"특정 체크 항목만 실행. 가능: {', '.join(OPTIONAL_CHECK_IDS)}",
     )
     parser.add_argument("--json", action="store_true", help="JSON 리포트 출력")
     parser.add_argument("--strict", action="store_true", help="실패 시 exit 1")
@@ -840,9 +895,9 @@ def main() -> int:
 
     # --only 유효성
     if args.only:
-        unknown = [x for x in args.only if x not in CHECK_IDS]
+        unknown = [x for x in args.only if x not in OPTIONAL_CHECK_IDS]
         if unknown:
-            parser.error(f"알 수 없는 체크 ID: {unknown}. 가능: {CHECK_IDS}")
+            parser.error(f"알 수 없는 체크 ID: {unknown}. 가능: {OPTIONAL_CHECK_IDS}")
 
     text_override: str | None = None
     draft_path = args.draft
@@ -869,6 +924,7 @@ def main() -> int:
         article_id=args.article_id,
         text_override=text_override,
         ghost_post_id=args.ghost_post_id,
+        category=args.category,
     )
 
     if args.json:

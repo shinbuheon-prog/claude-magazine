@@ -1,6 +1,7 @@
 .env
 data/
 data/pii_mappings/
+data/editor_corrections.db
 drafts/
 logs/
 __pycache__/

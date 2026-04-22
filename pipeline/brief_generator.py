@@ -25,6 +25,15 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         check_diversity = None  # type: ignore
 
+try:
+    from pipeline.heuristics_injector import inject_heuristics
+except ModuleNotFoundError:
+    try:
+        from heuristics_injector import inject_heuristics  # type: ignore
+    except ModuleNotFoundError:
+        def inject_heuristics(category: str, max_examples: int = 10) -> str:
+            return ""
+
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -167,12 +176,14 @@ def generate_brief(
     dry_run: bool = False,
     article_id: str = "",
     strict_diversity: bool = False,
+    category: str = "all",
 ) -> dict:
     # TASK_019 통합: article_id가 있으면 소스 다양성 검사
     _run_diversity_gate(article_id, strict=strict_diversity)
 
     if dry_run:
         brief = _build_dry_run_brief(topic)
+        brief["category"] = category
         _validate_brief_schema(brief)
         _write_log(topic, "dry-run", 0, 0)
         return brief
@@ -181,6 +192,7 @@ def generate_brief(
 
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     template = load_template()
+    heuristics_block = inject_heuristics(category)
 
     system_prompt = (
         "당신은 한국어 B2B 기술 매체의 수석 편집자다.\n"
@@ -188,6 +200,8 @@ def generate_brief(
         "원문에 없는 주장, 수치, 인용은 만들지 말라.\n"
         "출력은 지정된 JSON만 반환하라."
     )
+    if heuristics_block:
+        system_prompt += "\n\n" + heuristics_block
     user_prompt = template.replace("{{topic}}", topic).replace("{{source_bundle}}", source_bundle)
 
     result_text = ""
@@ -210,6 +224,7 @@ def generate_brief(
         output_tokens = final.usage.output_tokens
 
     brief = _extract_json_block(result_text)
+    brief.setdefault("category", category)
     _validate_brief_schema(brief)
     log_usage(
         getattr(trace, "id", None),
@@ -230,6 +245,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="API 호출 없이 샘플 브리프 생성")
     parser.add_argument("--article-id", dest="article_id", default="", help="소스 다양성 검사에 사용할 article_id")
     parser.add_argument("--strict-diversity", action="store_true", help="소스 다양성 실패 시 중단 (exit 1)")
+    parser.add_argument("--category", default="all", help="editor heuristics category")
     args = parser.parse_args()
 
     source_bundle = load_sources(args.sources)
@@ -239,6 +255,7 @@ def main() -> None:
         dry_run=args.dry_run,
         article_id=args.article_id,
         strict_diversity=args.strict_diversity,
+        category=args.category,
     )
     output = json.dumps(brief, ensure_ascii=False, indent=2)
 

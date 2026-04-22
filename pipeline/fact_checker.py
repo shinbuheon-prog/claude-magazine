@@ -19,6 +19,15 @@ try:
 except ModuleNotFoundError:
     from observability import log_usage, start_trace
 
+try:
+    from pipeline.heuristics_injector import inject_heuristics
+except ModuleNotFoundError:
+    try:
+        from heuristics_injector import inject_heuristics  # type: ignore
+    except ModuleNotFoundError:
+        def inject_heuristics(category: str, max_examples: int = 10) -> str:
+            return ""
+
 # Windows 환경에서 한국어/특수문자 출력을 위한 UTF-8 강제 설정
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -55,15 +64,18 @@ def load_sources_for_article(article_id: str | None) -> str:
         return "(source_registry 미구현 — TASK_004 완료 후 활성화됩니다)"
 
 
-def run_factcheck(draft_text: str, source_bundle: str) -> str:
+def run_factcheck(draft_text: str, source_bundle: str, category: str = "all") -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     template = load_template()
+    heuristics_block = inject_heuristics(category)
 
     system_prompt = (
         "당신은 팩트체커다.\n"
         "초안의 각 문장을 출처와 대조해 아래 4개 중 하나로 판정하라.\n"
         "1) 확인됨\n2) 과장됨\n3) 출처 불충분\n4) 수정 필요"
     )
+    if heuristics_block:
+        system_prompt += "\n\n" + heuristics_block
 
     user_prompt = (
         template
@@ -114,15 +126,18 @@ def run_factcheck(draft_text: str, source_bundle: str) -> str:
     return result_text
 
 
-def dry_run_preview(draft_text: str, source_bundle: str) -> None:
+def dry_run_preview(draft_text: str, source_bundle: str, category: str = "all") -> None:
     """API 호출 없이 시스템 프롬프트와 유저 프롬프트를 출력한다."""
     template = load_template()
+    heuristics_block = inject_heuristics(category)
 
     system_prompt = (
         "당신은 팩트체커다.\n"
         "초안의 각 문장을 출처와 대조해 아래 4개 중 하나로 판정하라.\n"
         "1) 확인됨\n2) 과장됨\n3) 출처 불충분\n4) 수정 필요"
     )
+    if heuristics_block:
+        system_prompt += "\n\n" + heuristics_block
 
     user_prompt = (
         template
@@ -147,6 +162,7 @@ def main():
     parser = argparse.ArgumentParser(description="팩트체크 에이전트")
     parser.add_argument("--draft", required=True, help="초안 마크다운 파일 경로")
     parser.add_argument("--article-id", help="출처 레지스트리 기사 ID (선택)")
+    parser.add_argument("--category", default="all", help="editor heuristics category")
     parser.add_argument("--out", help="결과 저장 경로 (생략 시 자동 생성)")
     parser.add_argument("--dry-run", action="store_true",
                         help="API 호출 없이 시스템/유저 프롬프트를 미리보기 출력")
@@ -156,11 +172,11 @@ def main():
     source_bundle = load_sources_for_article(args.article_id)
 
     if args.dry_run:
-        dry_run_preview(draft_text, source_bundle)
+        dry_run_preview(draft_text, source_bundle, category=args.category)
         return
 
     print("=== 팩트체크 시작 ===", file=sys.stderr)
-    result = run_factcheck(draft_text, source_bundle)
+    result = run_factcheck(draft_text, source_bundle, category=args.category)
 
     out_path = args.out or str(LOGS_DIR / f"factcheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
     Path(out_path).write_text(result, encoding="utf-8")

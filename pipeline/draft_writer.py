@@ -18,6 +18,15 @@ try:
 except ModuleNotFoundError:
     from observability import log_usage, start_trace
 
+try:
+    from pipeline.heuristics_injector import inject_heuristics
+except ModuleNotFoundError:
+    try:
+        from heuristics_injector import inject_heuristics  # type: ignore
+    except ModuleNotFoundError:
+        def inject_heuristics(category: str, max_examples: int = 10) -> str:
+            return ""
+
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,12 +87,15 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
 
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     template = load_template()
+    heuristics_block = inject_heuristics(str(brief.get("category") or "all"))
     system_prompt = (
         "당신은 신중한 기술 저널리스트다.\n"
         "한국어로만 작성하라.\n"
         "각 문단은 하나의 결론만 다룬다.\n"
         "출처 없는 단정은 금지한다."
     )
+    if heuristics_block:
+        system_prompt += "\n\n" + heuristics_block
     user_prompt = (
         template.replace("{{approved_brief}}", json.dumps(brief, ensure_ascii=False, indent=2))
         .replace("{{section_name}}", section_name)
