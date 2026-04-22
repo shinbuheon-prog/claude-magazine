@@ -46,3 +46,4 @@ TASK_035 | 80페이지 월간 PDF 컴파일러 (compile_monthly_pdf.py) | merged
 TASK_036 | 월간 플랜 관리 CLI (plan_issue.py) | merged
 TASK_037 | 월간 발행 원스톱 + 대시보드 진행률 위젯 | merged
 TASK_038 | typeui.sh 디자인 스킬 선별 도입 (mono·status·type scale) | merged
+TASK_039 | Claude Code 2.1.x 신기능 통합 (Opus 1M·/ultrareview·forking) | merged

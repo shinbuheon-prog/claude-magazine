@@ -71,6 +71,11 @@ def load_sources_for_article(article_id: str | None) -> str:
 
 def run_factcheck(draft_text: str, source_bundle: str, category: str = "all") -> str:
     # TASK_033: provider 추상화 (CLAUDE_PROVIDER=sdk면 Max 구독 Opus 경유)
+    # TASK_039: v2.1.117부터 Opus 4.7 1M 컨텍스트 복원됨.
+    #   - Feature(14p) + 소스 15~20개 + heuristics 를 단일 호출로 검증 가능
+    #   - 이전처럼 섹션 분할 호출 불필요 (컨텍스트 충분)
+    #   - 핵심 꼭지 최종 검토에는 Claude Code 세션에서 `/effort xhigh` 전환 권장
+    #   - 가이드: docs/claude_code_features.md §1·§3
     try:
         from pipeline.claude_provider import get_provider
     except ModuleNotFoundError:

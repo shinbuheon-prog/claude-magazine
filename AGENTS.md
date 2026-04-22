@@ -68,6 +68,28 @@ Agent({
 ```
 완료 시 변경사항은 별도 브랜치에 커밋됨. 사람이 리뷰·머지.
 
+### Subagent Forking (TASK_039, Claude Code v2.1.117+)
+
+환경변수 `CLAUDE_CODE_FORK_SUBAGENT=1` 설정 시 각 서브에이전트가 독립 fork로 실행.
+
+**효과**:
+- 부모 세션 상태 공유 제거 → 병렬 위임 간섭 방지
+- Worktree 파일 격리 + Forking 세션 격리 **이중 보호**
+
+**운영 권장**:
+```bash
+# 월간 발행 준비 (21꼭지 병렬 제작) 시작 전
+export CLAUDE_CODE_FORK_SUBAGENT=1
+
+# Agent tool 호출 시 isolation 함께 지정
+# → 파일·세션 모두 격리된 최상위 안정성
+```
+
+**주의**:
+- Max 구독 세션 한도 내에서 **8~10개 병렬이 현실적 상한** (5시간 리셋 기준)
+- 단순 단일 Agent 작업에는 불필요
+- 자세한 패턴: docs/claude_code_features.md §4
+
 ### 병렬 위임 표준 체크리스트
 
 **위임 전:**

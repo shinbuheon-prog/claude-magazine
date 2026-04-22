@@ -86,11 +86,17 @@ def stage_plan_loaded(args, state, plan) -> bool:
 
 
 def stage_quality_gate(args, state, plan) -> bool:
+    # TASK_039: Claude Code v2.1.111+ 의 /ultrareview 를 병용하면 21꼭지 병렬 검토 가능.
+    # 이 함수는 plan의 상태값만 집계. 실제 품질 검증은 아래 두 경로 중 선택:
+    #   (a) 자동: Claude Code 세션에서 `publish-gate` skill을 꼭지별 반복 호출
+    #   (b) 병렬: `/ultrareview` 수동 호출 (현재 develop 브랜치의 drafts/ 전체)
+    # /ultrareview 워크플로우 가이드: docs/claude_code_features.md §2
     if state["stages"].get("quality_gate", {}).get("passed") is not None:
         print(f"⏭  [2/7] 품질 게이트 — 이전 실행 결과 재사용")
         return True
 
     print(f"🔍 [2/7] 품질 게이트 (꼭지별 lint·standards·diversity)")
+    print(f"   TIP: 21꼭지 병렬 리뷰는 Claude Code 세션에서 `/ultrareview` 병용 권장")
     articles = plan.get("articles", [])
 
     passed, failed, errors = 0, 0, []
