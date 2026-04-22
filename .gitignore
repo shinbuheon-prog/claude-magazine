@@ -17,3 +17,8 @@ web/dist/
 
 # PDF 출력 (버전관리 제외)
 output/
+
+# 주간 개선 제안 보고서 (TASK_027) — reports/*.md는 버전 관리됨.
+# failure_collector의 원본 JSON만 제외 (PII/민감 정보 포함 가능성).
+reports/*.failures.json
+

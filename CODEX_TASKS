@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-22 10:09
+# 업데이트: 2026-04-22 12:30
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -27,13 +27,9 @@ TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | cancelled
 TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | merged
 TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
 TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | merged
-
-# ── Phase 3 확장: 인프라 독립 (Ghost Self-Hosted) ──
 TASK_024 | Ghost Self-Hosted 배포 자동화 (deploy/docker-compose.yml) | merged
-
-# ── Phase 4: Miessler AI 원칙 적용 (지수적 복리 효과) ──
 TASK_025 | 기사 이상 상태(Pass/Fail) 스펙 시스템 (spec/article_standards.yml) | merged
 TASK_026 | 편집자 판정 누적 시스템 (Expertise Diffusion) | merged
-TASK_027 | 자율 개선 루프 (Autonomous Optimization) | todo
+TASK_027 | 자율 개선 루프 (Autonomous Optimization) | merged
 TASK_028 | 운영 투명성 대시보드 (Opacity to Transparency) | merged
 TASK_029 | 편집자 승인 UI (스캐폴딩 제거) | merged
