@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-22 09:09
+# 업데이트: 2026-04-22 09:24
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -29,4 +29,4 @@ TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
 TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | merged
 
 # ── Phase 3 확장: 인프라 독립 (Ghost Self-Hosted) ──
-TASK_024 | Ghost Self-Hosted 배포 자동화 (deploy/docker-compose.yml) | todo
+TASK_024 | Ghost Self-Hosted 배포 자동화 (deploy/docker-compose.yml) | merged
