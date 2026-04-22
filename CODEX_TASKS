@@ -37,3 +37,4 @@ TASK_029 | 편집자 승인 UI (스캐폴딩 제거) | merged
 # ── Phase 5: Superpowers 철학 적용 (Skills + Worktree) ──
 TASK_030 | 매거진 전용 Claude Code Skills 정의 (.claude/skills/) | merged
 TASK_031 | Git Worktree 기반 Agent 병렬 위임 표준화 (AGENTS.md 확장) | merged
+TASK_032 | 소스 자동 수집 파이프라인 RSS·Atom (source_ingester.py) | merged

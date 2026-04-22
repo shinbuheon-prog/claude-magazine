@@ -121,6 +121,9 @@ claude-magazine/
 │   ├── article_standards.yml   - 6 카테고리 pass/fail 기준
 │   └── README.md
 │
+├── config/                ← 운영 설정 (TASK_032)
+│   └── feeds.yml               - RSS/Atom 피드 구독 목록
+│
 ├── reports/               ← 자율 개선 루프 출력 (TASK_027)
 │   └── improvement_YYYY-MM-DD.md
 │

@@ -1,0 +1,122 @@
+{
+  "name": "Claude Magazine — Source Ingest (TASK_032)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Seoul",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 5,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Cron (05:00 KST daily)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "python scripts/run_source_ingest.py --json",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}",
+        "options": {
+          "retryOnFail": true,
+          "maxTries": 3,
+          "waitBetweenTries": 900000
+        }
+      },
+      "name": "Ingest Feeds",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// JSON 결과 파싱 + 알림 임계값 체크\nconst raw = items[0].json.stdout || '{}';\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{json: {error: 'JSON parse failed', raw}}];\n}\n\nconst newCount = parsed.entries_new || 0;\nconst shouldNotify = newCount >= 5;\n\nreturn [{\n  json: {\n    ...parsed,\n    notify: shouldNotify,\n    message: shouldNotify\n      ? `📥 주간 피드 ${newCount}건 신규 수집 (기존 ${parsed.entries_duplicate})`\n      : `(skip notify, ${newCount} < 5)`\n  }\n}];"
+      },
+      "name": "Check Threshold",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.notify}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "If Notify",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "method": "POST",
+        "bodyParametersJson": "={\"text\": \"{{$json.message}}\\n• 피드: {{$json.feeds_processed}}개\\n• 조회: {{$json.entries_fetched}}건\\n• 등록: {{$json.entries_registered}}건\"}"
+      },
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 250]
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "method": "POST",
+        "bodyParametersJson": "={\"text\": \"❌ workflow_6 실패\\nExecution ID: {{$json.execution.id}}\\nError: {{$json.execution.error.message}}\"}"
+      },
+      "name": "Slack Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 600]
+    }
+  ],
+  "connections": {
+    "Cron (05:00 KST daily)": {
+      "main": [[{ "node": "Ingest Feeds", "type": "main", "index": 0 }]]
+    },
+    "Ingest Feeds": {
+      "main": [[{ "node": "Check Threshold", "type": "main", "index": 0 }]]
+    },
+    "Check Threshold": {
+      "main": [[{ "node": "If Notify", "type": "main", "index": 0 }]]
+    },
+    "If Notify": {
+      "main": [
+        [{ "node": "Slack Notify", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Slack Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "tags": ["claude-magazine", "source-ingest", "TASK_032"],
+  "id": "workflow_6_source_ingest"
+}
