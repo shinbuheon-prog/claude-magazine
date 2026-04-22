@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-22 08:32
+# 업데이트: 2026-04-22 09:09
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -26,4 +26,4 @@ TASK_019 | 소스 다양성 규칙 엔진 (source_diversity.py) | merged
 TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | cancelled
 TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | merged
 TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
-TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | todo
+TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | merged
