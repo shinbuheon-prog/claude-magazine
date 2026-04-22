@@ -45,3 +45,4 @@ TASK_034 | 매거진 추가 컴포넌트 (TOC·Editorial·Colophon) | merged
 TASK_035 | 80페이지 월간 PDF 컴파일러 (compile_monthly_pdf.py) | merged
 TASK_036 | 월간 플랜 관리 CLI (plan_issue.py) | merged
 TASK_037 | 월간 발행 원스톱 + 대시보드 진행률 위젯 | merged
+TASK_038 | typeui.sh 디자인 스킬 선별 도입 (mono·status·type scale) | merged
