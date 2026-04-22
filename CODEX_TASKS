@@ -27,3 +27,6 @@ TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | cancelled
 TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | merged
 TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
 TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | merged
+
+# ── Phase 3 확장: 인프라 독립 (Ghost Self-Hosted) ──
+TASK_024 | Ghost Self-Hosted 배포 자동화 (deploy/docker-compose.yml) | todo
