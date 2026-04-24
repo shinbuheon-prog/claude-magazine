@@ -44,6 +44,7 @@ NETWORK_TIMEOUT = 10
 # 10개 항목의 ID 순서 (editorial_checklist.md 매핑)
 CHECK_IDS = [
     "source-id",
+    "citations-cross-check",
     "translation-guard",
     "title-body-match",
     "quote-fidelity",
@@ -165,6 +166,79 @@ def check_source_id(text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# 체크 1b: citations-cross-check — 수동 source_id 와 citations 결과 교차검증
+# ---------------------------------------------------------------------------
+
+
+def _extract_manual_source_ids(text: str) -> set[str]:
+    return {match.strip() for match in re.findall(r"src-[a-zA-Z0-9_-]+", text)}
+
+
+def check_citations_cross_check(text: str, article_id: str | None = None) -> dict[str, Any]:
+    if not article_id:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": "article_id missing; citations cross-check skipped",
+        }
+
+    try:
+        try:
+            from pipeline.citations_store import load_citations
+        except ModuleNotFoundError:
+            from citations_store import load_citations  # type: ignore
+    except ImportError:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": "citations_store missing; citations cross-check skipped",
+        }
+
+    payload = load_citations(article_id)
+    if not payload:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": f"no citations data for article_id={article_id}",
+        }
+
+    manual_source_ids = _extract_manual_source_ids(text)
+    cited_source_ids = {
+        citation.get("source_id")
+        for claim in payload.get("claims", [])
+        for citation in claim.get("citations", [])
+        if citation.get("source_id")
+    }
+
+    if not manual_source_ids:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": "manual source_id markers not found in draft",
+        }
+    if not cited_source_ids:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": "citations file exists but no source_id-backed citations were extracted",
+        }
+
+    missing = sorted(manual_source_ids - cited_source_ids)
+    if missing:
+        return {
+            "id": "citations-cross-check",
+            "status": "warn",
+            "message": f"{len(missing)} source_id values are not backed by citations output yet",
+            "details": missing[:5],
+        }
+    return {
+        "id": "citations-cross-check",
+        "status": "pass",
+        "message": f"manual source_id markers align with citations output ({len(manual_source_ids)} ids)",
+    }
+
+
+# ---------------------------------------------------------------------------
 # 체크 2: translation-guard — 3줄 이상 연속 인용 경고
 # ---------------------------------------------------------------------------
 
@@ -213,7 +287,7 @@ def _extract_title_body(text: str) -> tuple[str, str]:
     body_lines: list[str] = []
     found = False
     for line in text.splitlines():
-        stripped = line.strip()
+        stripped = line.replace("\ufeff", "").strip()
         if not found and stripped.startswith("# "):
             title = stripped.lstrip("#").strip()
             # 제목 뒤 source_id 제거
@@ -265,9 +339,22 @@ def check_title_body_match(text: str) -> dict[str, Any]:
         )
         user_prompt = f"[제목]\n{title}\n\n[본문 발췌]\n{body_excerpt}"
 
-        result = provider.stream_complete(
-            system=system_prompt,
-            user=user_prompt,
+        system_blocks = [{"type": "text", "text": system_prompt}]
+        messages = [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
+        try:
+            token_count = provider.count_tokens(
+                system_blocks=system_blocks,
+                messages=messages,
+                model_tier="sonnet",
+            )
+        except Exception:
+            token_count = 0
+        if provider.name == "api" and token_count >= 2048:
+            system_blocks[-1]["cache_control"] = {"type": "ephemeral"}
+
+        result = provider.complete_with_blocks(
+            system_blocks=system_blocks,
+            messages=messages,
             model_tier="sonnet",
             max_tokens=100,
         )
@@ -695,6 +782,7 @@ def check_request_id_log(
 
 CHECK_FUNCS = {
     "source-id": lambda text, **_: check_source_id(text),
+    "citations-cross-check": lambda text, article_id=None, **_: check_citations_cross_check(text, article_id),
     "translation-guard": lambda text, **_: check_translation_guard(text),
     "title-body-match": lambda text, **_: check_title_body_match(text),
     "quote-fidelity": lambda text, article_id=None, **_: check_quote_fidelity(text, article_id),
@@ -1141,7 +1229,7 @@ def _smoke_test() -> None:
     tmp.write_text(sample, encoding="utf-8")
     res = lint_draft(str(tmp))
     assert "items" in res
-    assert len(res["items"]) == 10
+    assert len(res["items"]) == len(CHECK_IDS)
     assert any(it["id"] == "source-id" for it in res["items"])
     tmp.unlink(missing_ok=True)
     print("✓ editorial_lint 스모크 테스트 통과")

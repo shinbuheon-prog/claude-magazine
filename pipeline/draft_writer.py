@@ -41,7 +41,29 @@ def load_template() -> str:
     return (PROMPTS_DIR / "template_B_draft.txt").read_text(encoding="utf-8")
 
 
-def _write_log(section_name: str, request_id: str | None, input_tokens: int, output_tokens: int) -> Path:
+def _cache_threshold(model_tier: str) -> int:
+    return {"opus": 4096, "sonnet": 2048, "haiku": 4096}.get(model_tier, 2048)
+
+
+def _should_cache_system(provider, system_blocks: list[dict], messages: list[dict], model_tier: str) -> bool:
+    if getattr(provider, "name", "") != "api":
+        return False
+    try:
+        tokens = provider.count_tokens(system_blocks=system_blocks, messages=messages, model_tier=model_tier)
+    except Exception:
+        return False
+    return tokens >= _cache_threshold(model_tier)
+
+
+def _write_log(
+    section_name: str,
+    request_id: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    cache_enabled: bool = False,
+) -> Path:
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "request_id": request_id,
@@ -49,6 +71,9 @@ def _write_log(section_name: str, request_id: str | None, input_tokens: int, out
         "section": section_name,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "cache_read_input_tokens": cache_read_tokens,
+        "cache_creation_input_tokens": cache_creation_tokens,
+        "cache_enabled": cache_enabled,
     }
     log_file = LOGS_DIR / f"draft_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     log_file.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -130,11 +155,18 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
         except UnicodeEncodeError:
             pass  # Windows cp949 특수문자 skip
 
-    result = provider.stream_complete(
-        system=system_prompt,
-        user=user_prompt,
+    system_blocks = [{"type": "text", "text": system_prompt}]
+    messages = [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
+    cache_enabled = _should_cache_system(provider, system_blocks, messages, "sonnet")
+    if cache_enabled:
+        system_blocks[-1]["cache_control"] = {"type": "ephemeral"}
+
+    result = provider.complete_with_blocks(
+        system_blocks=system_blocks,
+        messages=messages,
         model_tier="sonnet",
         max_tokens=6000,
+        stream=True,
         stream_callback=_stream_print,
     )
     print()
@@ -148,7 +180,15 @@ def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_r
         result.model or "claude-sonnet-4-6",
         request_id=result.request_id,
     )
-    _write_log(section_name, result.request_id, result.input_tokens, result.output_tokens)
+    _write_log(
+        section_name,
+        result.request_id,
+        result.input_tokens,
+        result.output_tokens,
+        cache_read_tokens=result.cache_read_tokens,
+        cache_creation_tokens=result.cache_creation_tokens,
+        cache_enabled=cache_enabled,
+    )
     return draft_text
 
 

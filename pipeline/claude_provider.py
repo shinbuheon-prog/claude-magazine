@@ -1,18 +1,16 @@
 """
-Claude Provider 추상화 (TASK_033)
+Claude provider abstraction.
 
-파이프라인 모듈이 Claude API를 호출하는 방식을 추상화.
-- AnthropicAPIProvider: 기존 anthropic 라이브러리 (pay-per-use)
-- ClaudeAgentSDKProvider: Claude Agent SDK (Pro/Max 구독 내 동작, 추가 비용 0)
-- MockProvider: 테스트용 고정 응답
+This module keeps the existing three execution paths:
+- `api`: Anthropic Messages API
+- `sdk`: Claude Agent SDK
+- `mock`: local fixed response for tests
 
-환경변수:
-    CLAUDE_PROVIDER=sdk  # sdk | api | mock  (기본: api, 하위 호환)
+TASK_044 adds:
+- block-based message execution for prompt caching
+- token counting helper
 
-모델 티어 매핑:
-    "sonnet" → claude-sonnet-4-6 / "sonnet" (SDK)
-    "opus"   → claude-opus-4-7   / "opus" (SDK)
-    "haiku"  → claude-haiku-4-5-20251001 / "haiku" (SDK)
+TASK_045 uses the same block-based API path for Citations.
 """
 from __future__ import annotations
 
@@ -20,10 +18,8 @@ import asyncio
 import os
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
-
-# ── 모델 티어 매핑 ────────────────────────────────
 
 MODEL_ALIASES = {
     "api": {
@@ -41,7 +37,6 @@ MODEL_ALIASES = {
 
 @dataclass
 class CompleteResult:
-    """Provider 호출 결과 공통 인터페이스."""
     text: str
     request_id: str | None = None
     session_id: str | None = None
@@ -51,13 +46,40 @@ class CompleteResult:
     cache_creation_tokens: int = 0
     model: str = ""
     provider: str = ""
-    raw: Any = None  # 원본 응답 (디버그용)
+    raw: Any = None
 
 
-# ── Provider 인터페이스 ──────────────────────────
+def _extract_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content or "")
+
+    texts: list[str] = []
+    for block in content:
+        if isinstance(block, dict):
+            if block.get("type") == "text" and block.get("text"):
+                texts.append(str(block["text"]))
+            elif block.get("type") == "document":
+                title = str(block.get("title") or "Document")
+                source = block.get("source") or {}
+                if isinstance(source, dict):
+                    if source.get("type") == "text":
+                        texts.append(f"[{title}]\n{source.get('data', '')}")
+                    elif source.get("type") == "content":
+                        parts = []
+                        for item in source.get("content", []):
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                parts.append(str(item.get("text") or ""))
+                        texts.append(f"[{title}]\n" + "\n".join(parts))
+        else:
+            text = getattr(block, "text", None)
+            if text:
+                texts.append(str(text))
+    return "\n\n".join(part for part in texts if part)
+
 
 class Provider(ABC):
-    """Claude 호출 공통 인터페이스."""
     name: str = "abstract"
 
     @abstractmethod
@@ -65,92 +87,212 @@ class Provider(ABC):
         self,
         system: str,
         user: str,
-        model_tier: str = "sonnet",  # sonnet | opus | haiku
+        model_tier: str = "sonnet",
         max_tokens: int = 4096,
         stream_callback: Callable[[str], None] | None = None,
     ) -> CompleteResult:
-        """동기식 스트리밍 완료. chunk 단위로 stream_callback 호출."""
+        """Backward-compatible simple text path."""
 
+    def complete_with_blocks(
+        self,
+        *,
+        system_blocks: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        model_tier: str = "sonnet",
+        max_tokens: int = 4096,
+        stream: bool = False,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> CompleteResult:
+        system_text = _extract_text_from_content(system_blocks or [])
+        user_parts = []
+        for message in messages or []:
+            user_parts.append(_extract_text_from_content(message.get("content", "")))
+        user_text = "\n\n".join(part for part in user_parts if part)
+        return self.stream_complete(
+            system=system_text,
+            user=user_text,
+            model_tier=model_tier,
+            max_tokens=max_tokens,
+            stream_callback=stream_callback if stream else None,
+        )
 
-# ── AnthropicAPI (기존 경로) ──────────────────────
+    def count_tokens(
+        self,
+        *,
+        system_blocks: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        model_tier: str = "sonnet",
+    ) -> int:
+        text = _extract_text_from_content(system_blocks or [])
+        for message in messages or []:
+            text += "\n" + _extract_text_from_content(message.get("content", ""))
+        return max(1, len(text) // 4)
+
 
 class AnthropicAPIProvider(Provider):
     name = "api"
 
-    def __init__(self):
-        # 초기화 시점에 모듈만 확보, 클래스 참조는 호출마다 동적으로 가져와
-        # 기존 test_e2e.py 등의 anthropic.Anthropic patch 가 정상 동작하도록 한다.
+    def __init__(self) -> None:
         import anthropic as _anthropic_mod
+
         self._anthropic_mod = _anthropic_mod
 
-    def stream_complete(self, system, user, model_tier="sonnet", max_tokens=4096, stream_callback=None):
+    def _client(self):
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY 환경변수 미설정")
-
-        # 동적 참조 — patch 된 Anthropic 클래스도 반영됨
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
         client_cls = getattr(self._anthropic_mod, "Anthropic")
-        client = client_cls(api_key=api_key)
-        model = MODEL_ALIASES["api"][model_tier]
+        return client_cls(api_key=api_key)
 
-        result_text = ""
-        request_id = None
-        input_tokens = 0
-        output_tokens = 0
+    @staticmethod
+    def _usage_value(usage: Any, key: str) -> int:
+        if usage is None:
+            return 0
+        if isinstance(usage, dict):
+            return int(usage.get(key, 0) or 0)
+        return int(getattr(usage, key, 0) or 0)
 
-        with client.messages.stream(
-            model=model,
+    @staticmethod
+    def _text_from_response(response: Any) -> str:
+        chunks: list[str] = []
+        for block in getattr(response, "content", []) or []:
+            text = getattr(block, "text", None)
+            if text:
+                chunks.append(str(text))
+        return "".join(chunks)
+
+    def stream_complete(
+        self,
+        system: str,
+        user: str,
+        model_tier: str = "sonnet",
+        max_tokens: int = 4096,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> CompleteResult:
+        system_blocks = [{"type": "text", "text": system}]
+        messages = [{"role": "user", "content": [{"type": "text", "text": user}]}]
+        return self.complete_with_blocks(
+            system_blocks=system_blocks,
+            messages=messages,
+            model_tier=model_tier,
             max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                result_text += chunk
-                if stream_callback:
-                    stream_callback(chunk)
-            final = stream.get_final_message()
-            request_id = getattr(final, "_request_id", None)
-            if hasattr(final, "usage"):
-                input_tokens = final.usage.input_tokens
-                output_tokens = final.usage.output_tokens
-
-        return CompleteResult(
-            text=result_text,
-            request_id=request_id,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            model=model,
-            provider=self.name,
+            stream=True,
+            stream_callback=stream_callback,
         )
 
+    def complete_with_blocks(
+        self,
+        *,
+        system_blocks: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        model_tier: str = "sonnet",
+        max_tokens: int = 4096,
+        stream: bool = False,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> CompleteResult:
+        client = self._client()
+        model = MODEL_ALIASES["api"][model_tier]
+        system_payload: str | list[dict[str, Any]]
+        system_payload = system_blocks or ""
+        messages_payload = messages or []
 
-# ── ClaudeAgentSDK (Max 구독 경유) ────────────────
+        if stream:
+            result_text = ""
+            with client.messages.stream(
+                model=model,
+                max_tokens=max_tokens,
+                system=system_payload,
+                messages=messages_payload,
+            ) as stream_obj:
+                for chunk in stream_obj.text_stream:
+                    result_text += chunk
+                    if stream_callback:
+                        stream_callback(chunk)
+                final = stream_obj.get_final_message()
+            usage = getattr(final, "usage", None)
+            return CompleteResult(
+                text=result_text,
+                request_id=getattr(final, "id", None) or getattr(final, "_request_id", None),
+                input_tokens=self._usage_value(usage, "input_tokens"),
+                output_tokens=self._usage_value(usage, "output_tokens"),
+                cache_read_tokens=self._usage_value(usage, "cache_read_input_tokens"),
+                cache_creation_tokens=self._usage_value(usage, "cache_creation_input_tokens"),
+                model=model,
+                provider=self.name,
+                raw=final,
+            )
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system_payload,
+            messages=messages_payload,
+        )
+        usage = getattr(response, "usage", None)
+        return CompleteResult(
+            text=self._text_from_response(response),
+            request_id=getattr(response, "id", None) or getattr(response, "_request_id", None),
+            input_tokens=self._usage_value(usage, "input_tokens"),
+            output_tokens=self._usage_value(usage, "output_tokens"),
+            cache_read_tokens=self._usage_value(usage, "cache_read_input_tokens"),
+            cache_creation_tokens=self._usage_value(usage, "cache_creation_input_tokens"),
+            model=model,
+            provider=self.name,
+            raw=response,
+        )
+
+    def count_tokens(
+        self,
+        *,
+        system_blocks: list[dict[str, Any]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        model_tier: str = "sonnet",
+    ) -> int:
+        client = self._client()
+        model = MODEL_ALIASES["api"][model_tier]
+        response = client.messages.count_tokens(
+            model=model,
+            system=system_blocks or "",
+            messages=messages or [],
+        )
+        if hasattr(response, "input_tokens"):
+            return int(response.input_tokens)
+        if isinstance(response, dict):
+            return int(response.get("input_tokens", 0) or 0)
+        return super().count_tokens(system_blocks=system_blocks, messages=messages, model_tier=model_tier)
+
 
 class ClaudeAgentSDKProvider(Provider):
     name = "sdk"
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
-            from claude_agent_sdk import query, ClaudeAgentOptions
-            self._query = query
-            self._Options = ClaudeAgentOptions
+            from claude_agent_sdk import ClaudeAgentOptions, query
         except ImportError as exc:
-            raise RuntimeError(
-                "claude-agent-sdk 미설치 — `pip install claude-agent-sdk`"
-            ) from exc
+            raise RuntimeError("claude-agent-sdk is not installed") from exc
 
-    def stream_complete(self, system, user, model_tier="sonnet", max_tokens=4096, stream_callback=None):
+        self._query = query
+        self._Options = ClaudeAgentOptions
+
+    def stream_complete(
+        self,
+        system: str,
+        user: str,
+        model_tier: str = "sonnet",
+        max_tokens: int = 4096,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> CompleteResult:
         model = MODEL_ALIASES["sdk"][model_tier]
-        return asyncio.run(
-            self._async_stream(system, user, model, max_tokens, stream_callback)
-        )
+        return asyncio.run(self._async_stream(system, user, model, stream_callback))
 
-    async def _async_stream(self, system, user, model, max_tokens, stream_callback):
-        options = self._Options(
-            system_prompt=system,
-            model=model,
-            max_turns=1,
-        )
+    async def _async_stream(
+        self,
+        system: str,
+        user: str,
+        model: str,
+        stream_callback: Callable[[str], None] | None,
+    ) -> CompleteResult:
+        options = self._Options(system_prompt=system, model=model, max_turns=1)
 
         result_text = ""
         session_id = None
@@ -164,8 +306,6 @@ class ClaudeAgentSDKProvider(Provider):
             async for message in self._query(prompt=user, options=options):
                 raw_messages.append(message)
                 msg_type = type(message).__name__
-
-                # AssistantMessage: 실제 응답 텍스트
                 if msg_type == "AssistantMessage" and hasattr(message, "content"):
                     content = message.content
                     if isinstance(content, list):
@@ -175,32 +315,28 @@ class ClaudeAgentSDKProvider(Provider):
                                 result_text += text
                                 if stream_callback:
                                     stream_callback(text)
-
-                # ResultMessage: usage + session_id
                 if msg_type == "ResultMessage":
                     if hasattr(message, "session_id"):
                         session_id = message.session_id
                     usage = getattr(message, "usage", None)
-                    if usage:
-                        # usage는 dict 형태일 수 있음
-                        if isinstance(usage, dict):
-                            input_tokens = usage.get("input_tokens", 0) or 0
-                            output_tokens = usage.get("output_tokens", 0) or 0
-                            cache_read = usage.get("cache_read_input_tokens", 0) or 0
-                            cache_creation = usage.get("cache_creation_input_tokens", 0) or 0
-                        else:
-                            input_tokens = getattr(usage, "input_tokens", 0) or 0
-                            output_tokens = getattr(usage, "output_tokens", 0) or 0
+                    if isinstance(usage, dict):
+                        input_tokens = int(usage.get("input_tokens", 0) or 0)
+                        output_tokens = int(usage.get("output_tokens", 0) or 0)
+                        cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+                        cache_creation = int(usage.get("cache_creation_input_tokens", 0) or 0)
+                    elif usage is not None:
+                        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
         except Exception as exc:
-            # SDK 실패 시 상세 정보 포함해 예외 전파
             import traceback
+
             print("[debug] SDK traceback:", file=sys.stderr)
             traceback.print_exc()
-            raise RuntimeError(f"Claude Agent SDK 호출 실패: {type(exc).__name__}: {exc}") from exc
+            raise RuntimeError(f"Claude Agent SDK call failed: {type(exc).__name__}: {exc}") from exc
 
         return CompleteResult(
             text=result_text,
-            request_id=session_id,  # SDK는 별도 request_id 없어 session_id로 대체
+            request_id=session_id,
             session_id=session_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -212,46 +348,46 @@ class ClaudeAgentSDKProvider(Provider):
         )
 
 
-# ── Mock (테스트용) ──────────────────────────────
-
 class MockProvider(Provider):
     name = "mock"
 
-    def __init__(self, response_text: str = '{"working_title": "mock", "angle": "mock", "why_now": "mock", "outline": [], "evidence_map": [], "unknowns": [], "risk_flags": []}'):
+    def __init__(
+        self,
+        response_text: str = (
+            '{"working_title": "mock", "angle": "mock", "why_now": "mock", '
+            '"outline": [], "evidence_map": [], "unknowns": [], "risk_flags": []}'
+        ),
+    ) -> None:
         self._response = response_text
 
-    def stream_complete(self, system, user, model_tier="sonnet", max_tokens=4096, stream_callback=None):
-        # 청크 단위로 전달
+    def stream_complete(
+        self,
+        system: str,
+        user: str,
+        model_tier: str = "sonnet",
+        max_tokens: int = 4096,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> CompleteResult:
         if stream_callback:
-            for chunk in self._response[:100]:  # 일부만 스트리밍
+            for chunk in self._response[:100]:
                 stream_callback(chunk)
-
         return CompleteResult(
             text=self._response,
             request_id=f"mock-{model_tier}-req",
             input_tokens=10,
-            output_tokens=len(self._response) // 4,
+            output_tokens=max(1, len(self._response) // 4),
             model=f"mock-{model_tier}",
             provider=self.name,
         )
 
 
-# ── Factory ──────────────────────────────────────
-
 _provider_cache: Provider | None = None
 
 
 def get_provider(override: str | None = None, refresh: bool = False) -> Provider:
-    """
-    환경변수 CLAUDE_PROVIDER에 따라 Provider 반환.
-    - "api" (기본): AnthropicAPIProvider
-    - "sdk": ClaudeAgentSDKProvider
-    - "mock": MockProvider
-    """
     global _provider_cache
 
     kind = (override or os.environ.get("CLAUDE_PROVIDER", "api")).lower()
-
     if _provider_cache is not None and _provider_cache.name == kind and not refresh:
         return _provider_cache
 
@@ -262,60 +398,51 @@ def get_provider(override: str | None = None, refresh: bool = False) -> Provider
     elif kind == "api":
         _provider_cache = AnthropicAPIProvider()
     else:
-        raise ValueError(f"알 수 없는 CLAUDE_PROVIDER: {kind} (api|sdk|mock 중 선택)")
-
+        raise ValueError(f"Unsupported CLAUDE_PROVIDER: {kind} (api|sdk|mock)")
     return _provider_cache
 
 
-# ── 스모크 테스트 ─────────────────────────────────
-
 def _smoke_test() -> int:
-    """provider 3종 인스턴스 생성 테스트 (실제 호출 없음)."""
     if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    print("=== claude_provider 스모크 테스트 ===\n")
+    print("=== claude_provider smoke test ===\n")
+    checks: list[tuple[str, bool]] = []
 
-    checks = []
-
-    # 1. Mock provider
     try:
         mock = get_provider(override="mock", refresh=True)
-        result = mock.stream_complete(
-            system="test system",
-            user="test user",
-            model_tier="sonnet",
-            max_tokens=100,
-        )
+        result = mock.stream_complete(system="test", user="test")
         checks.append(("Mock provider", bool(result.text)))
-    except Exception as e:
-        checks.append((f"Mock provider — ERROR: {e}", False))
+    except Exception as exc:
+        checks.append((f"Mock provider error: {exc}", False))
 
-    # 2. API provider (인스턴스만, 호출은 안 함)
     try:
         if os.environ.get("ANTHROPIC_API_KEY"):
             api = get_provider(override="api", refresh=True)
-            checks.append(("API provider 인스턴스", isinstance(api, AnthropicAPIProvider)))
+            count = api.count_tokens(
+                system_blocks=[{"type": "text", "text": "system"}],
+                messages=[{"role": "user", "content": [{"type": "text", "text": "user"}]}],
+            )
+            checks.append(("API provider count_tokens", count > 0))
         else:
-            checks.append(("API provider — SKIP (no API key)", True))
-    except Exception as e:
-        checks.append((f"API provider — ERROR: {e}", False))
+            checks.append(("API provider skipped (no key)", True))
+    except Exception as exc:
+        checks.append((f"API provider error: {exc}", False))
 
-    # 3. SDK provider (인스턴스만)
     try:
         sdk = get_provider(override="sdk", refresh=True)
-        checks.append(("SDK provider 인스턴스", isinstance(sdk, ClaudeAgentSDKProvider)))
-    except Exception as e:
-        checks.append((f"SDK provider — ERROR: {e}", False))
+        checks.append(("SDK provider instance", isinstance(sdk, ClaudeAgentSDKProvider)))
+    except Exception as exc:
+        checks.append((f"SDK provider error: {exc}", False))
 
     passed = sum(1 for _, ok in checks if ok)
-    for idx, (name, ok) in enumerate(checks, 1):
-        status = "✅" if ok else "❌"
+    for idx, (name, ok) in enumerate(checks, start=1):
+        status = "OK" if ok else "FAIL"
         print(f"[{idx}/{len(checks)}] {status} {name}")
 
-    print(f"\n=== 결과: {passed}/{len(checks)} 통과 ===")
+    print(f"\n=== Result: {passed}/{len(checks)} passed ===")
     return 0 if passed == len(checks) else 1
 
 
 if __name__ == "__main__":
-    sys.exit(_smoke_test())
+    raise SystemExit(_smoke_test())

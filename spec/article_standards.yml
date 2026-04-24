@@ -3,6 +3,10 @@ common:
     - id: "source-id-coverage"
       rule: "모든 주장 문장에 source_id 연결"
       measure: "100% coverage"
+    - id: "citations_consistency"
+      rule: "Citations API 결과가 수동 source_id 와 대체로 일치"
+      measure: "citations-cross-check pass"
+      severity: "warn"
     - id: "ai-disclosure"
       rule: "AI 사용 고지 문구 존재"
       measure: "presence"
@@ -24,7 +28,7 @@ categories:
         measure: "count <= 3 AND max_words <= 40"
     should_pass:
       - id: "subject-portrait"
-        rule: "인터뷰이 사진 1장 이상"
+        rule: "인터뷰이 사진 1개 이상"
         measure: "presence"
 
   deep_dive:
@@ -33,7 +37,7 @@ categories:
         rule: "source 10개 이상"
         measure: "count >= 10"
       - id: "source-language-mix"
-        rule: "한국어·영문 공식 소스 각 3개 이상"
+        rule: "한국어/영문 공식 소스 각 3개 이상"
         measure: "ko_official >= 3 AND en_official >= 3"
       - id: "quantitative-claims"
         rule: "정량 수치 5개 이상, 모두 source_id 연결"
@@ -48,7 +52,7 @@ categories:
         rule: "평가 기준 3개 이상 점수화"
         measure: "count >= 3"
       - id: "pros-cons-balance"
-        rule: "Pros·Cons 각 2개 이상"
+        rule: "Pros/Cons 각 2개 이상"
         measure: "pros >= 2 AND cons >= 2"
       - id: "competitor-comparison"
         rule: "경쟁 제품 1개 이상 비교"
@@ -72,7 +76,7 @@ categories:
         rule: "차트 1개 이상 + 출처 명시"
         measure: "has_chart AND chart_source_id"
       - id: "trend-direction"
-        rule: "증감 방향 명시 (상승·하락·횡보 중 하나)"
+        rule: "증감 방향 명시 (상승/하락/횡보 중 하나)"
         measure: "presence"
 
   brief:
