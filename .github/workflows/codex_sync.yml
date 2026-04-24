@@ -6,6 +6,10 @@ on:
       - "tasks/TASK_*.md"
     branches: [main, develop]
 
+permissions:
+  # stefanzweifel/git-auto-commit-action이 CODEX_TASKS 업데이트 후 push하려면 write 권한 필요
+  contents: write
+
 jobs:
   sync-board:
     runs-on: ubuntu-latest
