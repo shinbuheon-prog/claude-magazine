@@ -41,6 +41,29 @@ def parse_board():
 
 
 def write_board(tasks):
+    task_lines = [
+        f"{task_id} | {tasks[task_id]['title']} | {tasks[task_id]['status']}"
+        for task_id in sorted(tasks.keys())
+    ]
+    # 타임스탬프 외 실제 내용이 동일하면 timestamp만 바꾸지 않고 skip
+    # (CI auto-commit 소음 방지)
+    existing = BOARD_FILE.read_text(encoding="utf-8") if BOARD_FILE.exists() else ""
+    existing_body = "\n".join(
+        ln for ln in existing.splitlines()
+        if not ln.startswith("# 업데이트:") and not ln.startswith("# CODEX_TASKS")
+    ).strip()
+    new_body = "\n".join(
+        ln for ln in [
+            "#",
+            "# FORMAT: TASK_ID | 제목 | status",
+            "# STATUS: todo | implemented | reviewed | merged",
+            "",
+            *task_lines,
+        ]
+    ).strip()
+    if existing_body == new_body:
+        return  # 실제 변경 없음 → write skip
+
     lines = [
         "# CODEX_TASKS — 클로드 매거진",
         f"# 업데이트: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
@@ -49,16 +72,17 @@ def write_board(tasks):
         "# STATUS: todo | implemented | reviewed | merged",
         "",
     ]
-    for task_id in sorted(tasks.keys()):
-        t = tasks[task_id]
-        lines.append(f"{task_id} | {t['title']} | {t['status']}")
+    lines.extend(task_lines)
     BOARD_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def sync():
-    """tasks/ 폴더의 TASK_*.md 파일들을 스캔해 보드 동기화"""
+    """tasks/ 폴더의 TASK_*.md 파일들을 스캔해 보드 동기화.
+    *_draft.md 는 후속 태스크 제안 초안이므로 보드에 등록하지 않는다."""
     existing = parse_board()
-    md_files = sorted(TASKS_DIR.glob("TASK_*.md"))
+    md_files = sorted(
+        p for p in TASKS_DIR.glob("TASK_*.md") if not p.stem.endswith("_draft")
+    )
 
     for directory in (DATA_DIR, DRAFTS_DIR, LOGS_DIR):
         directory.mkdir(exist_ok=True)
