@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-24 10:58
+# 업데이트: 2026-04-24 11:32
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -45,5 +45,7 @@ TASK_038 | typeui.sh 디자인 스킬 선별 도입 (mono·status·type scale) |
 TASK_039 | Claude Code 2.1.x 신기능 통합 (Opus 1M·/ultrareview·forking) | merged
 TASK_040 | baoyu-skills High 시너지 4종 선별 도입 (url-to-md·yt-transcript·article-illustrator·infographic) | merged
 TASK_041 | 카드뉴스 제작 스킬 + 밀도 게이트 (channel_rewriter 구조화) | merged
-TASK_042 | Figma MCP 옵션 조사 + slide JSON 통합 설계안 (docs/figma_integration_plan.md) | todo
-TASK_043 | 이미지 생성 provider 매트릭스 + illustration_hook 어댑터 설계 (docs + ABC 스켈레톤) | todo
+TASK_042 | Figma MCP 옵션 조사 + slide JSON 통합 설계안 (docs/figma_integration_plan.md) | implemented
+TASK_043 | 이미지 생성 provider 매트릭스 + illustration_hook 어댑터 설계 (docs + ABC 스켈레톤) | implemented
+TASK_044 | Prompt Caching 도입 (fact_checker·editorial_lint·brief_generator) | todo
+TASK_045 | Citations API 이중 운영 도입 (source-id 체크 보강) | todo
