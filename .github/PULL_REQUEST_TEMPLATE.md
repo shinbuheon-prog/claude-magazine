@@ -1,27 +1,28 @@
-## 변경 요약
-<!-- 무엇을, 왜 변경했는지 한 문장으로 -->
+## Change Summary
+<!-- What changed and why? Keep this to a few lines. -->
 
-## 관련 태스크 / 이슈
+## Related Issue
 - Closes #
 
-## 변경 유형
-- [ ] 태스크 구현 (TASK_XXX)
-- [ ] 기사 파이프라인 수정
-- [ ] 버그 수정
-- [ ] 문서 업데이트
-- [ ] 기타
+## Change Type
+- [ ] Task implementation (`TASK_XXX`)
+- [ ] Pipeline behavior change
+- [ ] Bug fix
+- [ ] Documentation update
+- [ ] Other
 
 ---
 
-## 편집 검수 체크리스트 (코드·콘텐츠 변경 시)
-- [ ] 핵심 주장마다 source_id 연결
-- [ ] 원문 대체형 번역·요약 없음
-- [ ] 제목-본문 과장·낚시성 불일치 없음
-- [ ] AI 생성 가상 사례·수치 혼입 없음
-- [ ] 모든 Claude API 호출에 request_id 로깅 포함
-- [ ] `.env` 키나 민감정보 커밋 없음
+## Editorial Checklist
+- [ ] Every claim still maps to a valid `source_id`
+- [ ] No translation-only or summary-only rewrite drift
+- [ ] Headline and body still match without exaggeration
+- [ ] AI disclosure and correction policy are preserved where required
+- [ ] Claude API calls still log `request_id`
+- [ ] No secrets or `.env` values were committed
 
-## 테스트 확인
-- [ ] `python codex_workflow.py list` 오류 없음
-- [ ] 변경된 모듈의 스모크 테스트 통과
-- [ ] `npm run dev` (web/ 변경 시) 오류 없음
+## Verification
+- [ ] `python codex_workflow.py list`
+- [ ] Relevant Python tests or smoke commands passed
+- [ ] `npm run build` passed for `web/` changes
+- [ ] CI checks passed or are expected to pass after merge queue

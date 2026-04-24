@@ -7,6 +7,14 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stdout._utf8_wrapped = True  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
 TASKS_DIR = Path(__file__).parent / "tasks"
 BOARD_FILE = Path(__file__).parent / "CODEX_TASKS"
 ROOT = Path(__file__).parent

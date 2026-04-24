@@ -2,42 +2,174 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - "**/*.md"
   pull_request:
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - "**/*.md"
+
+permissions:
+  contents: read
 
 jobs:
-  lint-and-smoke:
+  python-lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Python 설정
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check pipeline/ scripts/ codex_workflow.py
 
-      - name: 패키지 설치 (테스트용 최소 의존성)
-        run: |
-          pip install anthropic python-dotenv PyJWT requests
-
-      - name: Ruff lint
-        run: |
-          pip install ruff
-          ruff check pipeline/ scripts/ codex_workflow.py
-
-      - name: 코덱스 워크플로우 보드 확인
+  python-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+      - name: Codex workflow smoke
         run: python codex_workflow.py list
-
-      - name: source_registry 스모크 테스트
-        run: python pipeline/source_registry.py
+      - name: Source registry smoke
         env:
           SOURCE_DB_PATH: /tmp/test_registry.db
+        run: python pipeline/source_registry.py
+      - name: Import smoke
+        run: python -c "from pipeline.brief_generator import generate_brief; from pipeline.fact_checker import run_factcheck; print('OK')"
 
-      - name: brief_generator import 확인
-        run: python -c "from pipeline.brief_generator import generate_brief, load_sources; print('OK')"
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install test dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pytest with coverage
+        run: pytest --cov=pipeline.editorial_lint --cov=pipeline.citations_store --cov-report=xml:coverage.xml tests/
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-coverage
+          path: coverage.xml
+          retention-days: 3
 
-      - name: fact_checker import 확인
-        run: python -c "from pipeline.fact_checker import run_factcheck, load_sources_for_article; print('OK')"
+  web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        run: npm ci
+      - name: Build web app
+        run: npm run build
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 3
+
+  env-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+      - name: Seed sample env file
+        run: cp .env.example .env
+      - name: Environment dry-run check
+        run: python scripts/check_env.py --dry-run
+
+  spec-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install yaml dependency
+        run: pip install pyyaml
+      - name: Validate YAML specs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          from pipeline.failure_playbook import load_failure_playbook, validate_playbook_spec
+
+          files = [
+              "spec/article_standards.yml",
+              "spec/card_news_standards.yml",
+              "config/feeds.yml",
+          ]
+          for rel in files:
+              path = Path(rel)
+              yaml.safe_load(path.read_text(encoding="utf-8"))
+              print(f"OK: {rel}")
+
+          payload = load_failure_playbook()
+          validate_playbook_spec(payload)
+          print("OK: spec/failure_playbook.yml")
+          PY
+
+  mojibake-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan for replacement characters
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          bad = []
+          skip_parts = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
+          suffixes = {".md", ".py", ".yml", ".yaml", ".json", ".txt", ".jsx", ".js"}
+          markers = ("\ufffd", "\u00ef\u00bf\u00bd")
+
+          for path in Path(".").rglob("*"):
+              if any(part in skip_parts or part.startswith(".tmp_") for part in path.parts):
+                  continue
+              if not path.is_file() or path.suffix not in suffixes:
+                  continue
+              text = path.read_text(encoding="utf-8", errors="replace")
+              if any(marker in text for marker in markers):
+                  bad.append(str(path))
+
+          if bad:
+              print("Mojibake markers found:")
+              for item in bad[:20]:
+                  print(f"- {item}")
+              raise SystemExit(1)
+
+          print("mojibake scan: clean")
+          PY
