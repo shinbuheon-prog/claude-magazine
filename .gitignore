@@ -10,7 +10,7 @@ __pycache__/
 
 # Node.js
 node_modules/
-package-lock.json
+# package-lock.json은 web/·scripts/ 앱 재현성 확보를 위해 커밋 유지
 
 # 빌드 산출물
 web/dist/
