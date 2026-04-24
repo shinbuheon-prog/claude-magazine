@@ -10,6 +10,15 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from pipeline.illustration_providers.openai import OpenAIIllustrationProvider
+    from pipeline.illustration_providers.placeholder import PlaceholderIllustrationProvider
+except ModuleNotFoundError:
+    from illustration_providers.openai import OpenAIIllustrationProvider  # type: ignore
+    from illustration_providers.placeholder import PlaceholderIllustrationProvider  # type: ignore
+except Exception:
+    from pipeline.illustration_providers.placeholder import PlaceholderIllustrationProvider
+
 ROOT = Path(__file__).resolve().parent.parent
 ILLUSTRATION_ROOT = ROOT / "output" / "illustrations"
 LOG_PATH = ROOT / "logs" / "illustrations.jsonl"
@@ -28,7 +37,7 @@ def _select_targets(markdown: str) -> list[tuple[str, str]]:
     return [("핵심 요약", "infographic")]
 
 
-def _write_prompt(prompt_path: Path, title: str, image_type: str) -> None:
+def _write_prompt(prompt_path: Path, title: str, image_type: str) -> str:
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt = (
         f"---\n"
@@ -44,37 +53,44 @@ def _write_prompt(prompt_path: Path, title: str, image_type: str) -> None:
         f"- 메모: 실제 생성 백엔드 연결 전까지 placeholder 이미지 사용\n"
     )
     prompt_path.write_text(prompt, encoding="utf-8")
+    return prompt
 
 
-def _create_placeholder(image_path: Path, title: str) -> None:
-    image_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        from PIL import Image, ImageDraw
-    except ImportError:
-        image_path.write_bytes(b"")
-        return
-
-    img = Image.new("RGB", (1400, 800), color=(246, 240, 231))
-    draw = ImageDraw.Draw(img)
-    draw.rectangle((60, 60, 1340, 740), outline=(27, 31, 59), width=4)
-    draw.text((110, 120), "Claude Magazine Illustration Placeholder", fill=(27, 31, 59))
-    draw.text((110, 210), title[:60], fill=(201, 100, 66))
-    draw.text((110, 300), "Replace with baoyu-article-illustrator output", fill=(90, 90, 90))
-    img.save(image_path, format="PNG")
+def _resolve_provider() -> tuple[object, dict[str, object]]:
+    requested = os.getenv("CLAUDE_MAGAZINE_ILLUSTRATION_PROVIDER", "placeholder").strip().lower()
+    if requested in {"", "placeholder"}:
+        return PlaceholderIllustrationProvider(), {"requested_provider": "placeholder"}
+    if requested == "openai":
+        return OpenAIIllustrationProvider(), {"requested_provider": "openai"}
+    return PlaceholderIllustrationProvider(), {
+        "requested_provider": requested,
+        "fallback_reason": "provider_not_implemented",
+    }
 
 
-def _log_illustration(article_id: str, title: str, prompt_path: Path, image_path: Path, skill: str) -> None:
+def _log_illustration(
+    article_id: str,
+    title: str,
+    prompt_path: Path,
+    skill: str,
+    result,
+    provider_context: dict[str, object],
+) -> None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "article_id": article_id,
         "title": title,
-        "request_id": f"placeholder-{article_id}",
+        "request_id": result.request_id,
         "source": skill,
-        "model": "local-placeholder",
-        "license": "placeholder-for-review",
+        "provider": result.provider,
+        "model": result.model,
+        "license": result.license,
+        "cost_estimate": result.cost_estimate,
         "prompt_path": str(prompt_path.relative_to(ROOT)),
-        "image_path": str(image_path.relative_to(ROOT)),
+        "image_path": str(result.image_path.relative_to(ROOT)),
+        "provider_context": provider_context,
+        "metadata": result.metadata,
     }
     with LOG_PATH.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -90,26 +106,49 @@ def inject_illustrations(
     prompt_dir = target_dir / "prompts"
     updated = markdown
     targets = _select_targets(markdown)
+    provider, provider_context = _resolve_provider()
+    placeholder_provider = PlaceholderIllustrationProvider()
 
     for index, (title, image_type) in enumerate(targets, start=1):
         slug = _slugify(title, f"section-{index}")
         image_path = target_dir / f"{index:02d}-{image_type}-{slug}.png"
         prompt_path = prompt_dir / f"{index:02d}-{image_type}-{slug}.md"
-        _write_prompt(prompt_path, title, image_type)
-        if not image_path.exists():
-            _create_placeholder(image_path, title)
-        _log_illustration(article_id, title, prompt_path, image_path, skill)
+        prompt = _write_prompt(prompt_path, title, image_type)
+        try:
+            result = provider.generate(
+                prompt,
+                (1400, 800),
+                article_id,
+                title=title,
+                output_path=image_path,
+                prompt_path=prompt_path,
+            )
+        except Exception as exc:
+            provider_context = {
+                **provider_context,
+                "fallback_reason": "provider_error",
+                "fallback_error": str(exc),
+            }
+            result = placeholder_provider.generate(
+                prompt,
+                (1400, 800),
+                article_id,
+                title=title,
+                output_path=image_path,
+                prompt_path=prompt_path,
+            )
+        _log_illustration(article_id, title, prompt_path, skill, result, provider_context)
 
-        src = Path("output") / "illustrations" / _slugify(article_id, "article") / image_path.name
+        src = Path("output") / "illustrations" / _slugify(article_id, "article") / result.image_path.name
         if relative_to is not None:
             try:
-                src = Path(os.path.relpath(image_path, relative_to.parent))
+                src = Path(os.path.relpath(result.image_path, relative_to.parent))
             except ValueError:
-                src = Path("output") / "illustrations" / _slugify(article_id, "article") / image_path.name
+                src = Path("output") / "illustrations" / _slugify(article_id, "article") / result.image_path.name
 
         image_tag = (
             f'<img src="{src.as_posix()}" alt="{title} 시각화" '
-            f'data-rights="placeholder-for-review" />'
+            f'data-rights="{result.license}" />'
         )
         heading = f"## {title}"
         replacement = f"{heading}\n\n{image_tag}"
