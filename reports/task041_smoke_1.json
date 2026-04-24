@@ -1,0 +1,84 @@
+{
+  "channel": "sns",
+  "text": "",
+  "assets": [],
+  "missing_assets": [],
+  "recommendations": [],
+  "post_slug": "",
+  "month": "2026-04",
+  "format": "card-news",
+  "slides": [
+    {
+      "idx": 1,
+      "role": "hook",
+      "layout": "layout_6",
+      "tag": "Claude Magazine",
+      "main_copy": "TEST WEEKLY: 핵심 쟁점 브리프",
+      "sub_copy": "공개된 출처만으로 실무적 의미를 정리한다. (UNKNOWN)",
+      "highlight": "Hook",
+      "footer": "@claude_magazine_kr"
+    },
+    {
+      "idx": 2,
+      "role": "body",
+      "layout": "layout_1",
+      "tag": "핵심 정리",
+      "main_copy": "공개된 출처만으로 실무적 의미를 정리한다.",
+      "sub_copy": "(UNKNOWN)",
+      "highlight": "",
+      "footer": "@claude_magazine_kr"
+    },
+    {
+      "idx": 3,
+      "role": "body",
+      "layout": "layout_2",
+      "tag": "핵심 정리",
+      "main_copy": "현재 배포·가격·정책 변화가 의사결정에 직접 영향을 준다.",
+      "sub_copy": "(UNKNOWN)",
+      "highlight": "",
+      "footer": "@claude_magazine_kr"
+    },
+    {
+      "idx": 4,
+      "role": "body",
+      "layout": "layout_3",
+      "tag": "핵심 정리",
+      "main_copy": "공개된 출처만으로 실무적 의미를 정리한다.",
+      "sub_copy": "(UNKNOWN) 현재 배포·가격·정책 변화가 의사결정에 직접 영향을 준다.",
+      "highlight": "(UNKNOWN)",
+      "footer": "@claude_magazine_kr"
+    },
+    {
+      "idx": 5,
+      "role": "cta",
+      "layout": "layout_4",
+      "tag": "다음 액션",
+      "main_copy": "원문에서 전체 맥락을 확인하세요",
+      "sub_copy": "저장해두고 실무에 바로 적용할 포인트만 다시 보세요.",
+      "highlight": "Save / Share / Read",
+      "footer": "@claude_magazine_kr"
+    }
+  ],
+  "meta": {
+    "total_slides": 5,
+    "source_char_len": 163,
+    "lint_result": "pass",
+    "lint_items": [
+      {
+        "id": "card-news-density",
+        "status": "pass",
+        "message": "슬라이드 5건 밀도 규칙 통과"
+      },
+      {
+        "id": "source-fidelity",
+        "status": "pass",
+        "message": "원문 포인트 커버리지 100% (4/4)"
+      },
+      {
+        "id": "slide-count",
+        "status": "pass",
+        "message": "원문 163자 대비 5장 적정"
+      }
+    ]
+  }
+}

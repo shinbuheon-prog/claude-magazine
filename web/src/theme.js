@@ -50,6 +50,20 @@ export const FONTS = {
   mono:      "'JetBrains Mono', ui-monospace, monospace",
 };
 
+export const FONT_SERIF = "'Noto Serif KR', serif";
+export const FONT_MONO = "'JetBrains Mono', ui-monospace, monospace";
+export const FONT_SANS_SNS = "'Pretendard', 'Noto Sans KR', sans-serif";
+
+export const SNS_TOKENS = {
+  font: FONT_SANS_SNS,
+  line_height: 1.5,
+  letter_spacing: "-0.02em",
+  text_primary: "#111111",
+  text_secondary: "#333333",
+  safe_zone: { top: "15%", content: "70%", bottom: "15%" },
+  size: { w: 1080, h: 1350 },
+};
+
 // TASK_038: 명시적 타입 스케일 (typeui.sh 12/14/16/20/24/32 기반)
 // Tailwind 클래스와 매칭: text-xs(12) / text-sm(14) / text-base(16) / text-xl(20) / text-2xl(24) / text-3xl(30~32)
 export const TYPE_SCALE = {

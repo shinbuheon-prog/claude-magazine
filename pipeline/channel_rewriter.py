@@ -20,24 +20,31 @@ import argparse
 import io
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
-# Windows UTF-8 출력 (fact_checker.py / check_covers.py 패턴)
-# 중복 래핑 방지: 이미 utf-8 로 래핑된 경우 skip (import 시 stream close 로 인한
-# "I/O operation on closed file" 방어)
-if sys.platform == "win32":
-    if getattr(sys.stdout, "encoding", "").lower() != "utf-8":
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    if getattr(sys.stderr, "encoding", "").lower() != "utf-8":
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Windows UTF-8 출력 가드
+if sys.platform == "win32" and not getattr(sys.stdout, "_cm_utf8", False):
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stdout._cm_utf8 = True  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = ROOT / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 SNS_DIR = ROOT / "web" / "public" / "sns"
 SNS_PUBLIC_BASE = "/sns"
+CARD_NEWS_LOG = LOGS_DIR / "card_news.jsonl"
 
 CLAUDE_DESIGN_URL = "https://claude.ai/design"
 
@@ -97,6 +104,7 @@ CHANNEL_ASSETS = {
         {"type": "quote", "size": "1080x1080", "alt": "Twitter/X 인용 이미지"},
     ],
 }
+CARD_NEWS_LAYOUTS = [f"layout_{idx}" for idx in range(1, 8)]
 
 
 def _current_month() -> str:
@@ -229,6 +237,127 @@ def _build_recommendations(
     return recs
 
 
+def _extract_title_and_lines(draft_text: str) -> tuple[str, list[str]]:
+    title = "Claude Magazine"
+    lines: list[str] = []
+    for raw in draft_text.splitlines():
+        stripped = raw.replace("\ufeff", "").strip()
+        if not stripped:
+            continue
+        if stripped.startswith("# "):
+            title = re.sub(r"\[src-[^\]]+\]|\(source_id:\s*[^)]+\)", "", stripped[2:]).strip()
+            continue
+        if stripped.startswith("#"):
+            continue
+        cleaned = re.sub(r"\[src-[^\]]+\]|\(source_id:\s*[^)]+\)", "", stripped).strip()
+        if cleaned:
+            lines.append(cleaned)
+    return title, lines
+
+
+def _recommended_slide_count(source_char_len: int) -> int:
+    if source_char_len <= 500:
+        return 5
+    if source_char_len <= 1500:
+        return 7
+    return 10
+
+
+def _chunk_lines(lines: list[str], target_chunks: int) -> list[list[str]]:
+    if not lines:
+        return [[] for _ in range(target_chunks)]
+    chunk_size = max(1, len(lines) // target_chunks)
+    chunks: list[list[str]] = []
+    cursor = 0
+    for _ in range(target_chunks - 1):
+        next_cursor = min(len(lines), cursor + chunk_size)
+        chunks.append(lines[cursor:next_cursor])
+        cursor = next_cursor
+    chunks.append(lines[cursor:])
+    while len(chunks) < target_chunks:
+        chunks.append([])
+    return chunks
+
+
+def _split_content_sentences(lines: list[str]) -> list[str]:
+    sentences: list[str] = []
+    for line in lines:
+        parts = [part.strip() for part in re.split(r"(?<=[.!?。！？])\s+", line) if part.strip()]
+        sentences.extend(parts)
+    return sentences
+
+
+def build_card_news_slides(draft_text: str, channel: str) -> dict[str, object]:
+    title, lines = _extract_title_and_lines(draft_text)
+    source_char_len = len(re.sub(r"\s+", "", draft_text))
+    total_slides = _recommended_slide_count(source_char_len)
+    body_count = max(1, total_slides - 2)
+    sentences = _split_content_sentences(lines)
+    chunks = _chunk_lines(sentences or lines, body_count)
+    slides: list[dict[str, object]] = []
+
+    slides.append({
+        "idx": 1,
+        "role": "hook",
+        "layout": "layout_6",
+        "tag": "Claude Magazine",
+        "main_copy": title,
+        "sub_copy": lines[0] if lines else "핵심 메시지를 먼저 붙잡는 카드",
+        "highlight": "Hook",
+        "footer": "@claude_magazine_kr",
+    })
+
+    for idx, chunk in enumerate(chunks, start=2):
+        if idx == total_slides:
+            break
+        main_copy = chunk[0] if chunk else f"{idx-1}번째 핵심 포인트"
+        extra = chunk[1:4] if chunk else []
+        slides.append({
+            "idx": idx,
+            "role": "body",
+            "layout": CARD_NEWS_LAYOUTS[(idx - 2) % len(CARD_NEWS_LAYOUTS)],
+            "tag": "핵심 정리",
+            "main_copy": main_copy,
+            "sub_copy": " ".join(extra[:2]),
+            "highlight": extra[2] if len(extra) > 2 else "",
+            "footer": "@claude_magazine_kr",
+        })
+
+    slides.append({
+        "idx": len(slides) + 1,
+        "role": "cta",
+        "layout": "layout_4",
+        "tag": "다음 액션",
+        "main_copy": "원문에서 전체 맥락을 확인하세요",
+        "sub_copy": "저장해두고 실무에 바로 적용할 포인트만 다시 보세요.",
+        "highlight": "Save / Share / Read",
+        "footer": "@claude_magazine_kr",
+    })
+
+    return {
+        "channel": channel,
+        "format": "card-news",
+        "slides": slides,
+        "meta": {
+            "total_slides": len(slides),
+            "source_char_len": source_char_len,
+        },
+    }
+
+
+def _log_card_news(payload: dict[str, object], request_id: str | None) -> None:
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "request_id": request_id,
+        "channel": payload.get("channel"),
+        "format": payload.get("format"),
+        "total_slides": payload.get("meta", {}).get("total_slides") if isinstance(payload.get("meta"), dict) else None,
+        "source_char_len": payload.get("meta", {}).get("source_char_len") if isinstance(payload.get("meta"), dict) else None,
+    }
+    with CARD_NEWS_LOG.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
 def _haiku_rewrite(draft_text: str, channel: str) -> str:
     """Haiku API 호출로 텍스트 재가공 (기존 로직)."""
     import anthropic  # lazy import so --assets-report 모드는 의존성 없음
@@ -334,18 +463,43 @@ def rewrite_for_channel(
     month = month or _current_month()
 
     text_out = ""
+    request_id: str | None = None
     if not skip_text:
         text_out = _haiku_rewrite(draft_text, channel)
+        rewrite_logs = sorted(LOGS_DIR.glob(f"rewrite_{channel}_*.json"))
+        if rewrite_logs:
+            try:
+                request_id = json.loads(rewrite_logs[-1].read_text(encoding="utf-8")).get("request_id")
+            except Exception:
+                request_id = None
 
     assets: list[dict] = []
     missing: list[str] = []
     recs: list[str] = []
+    card_news_payload: dict[str, object] | None = None
 
     if post_slug:
         assets, missing = collect_channel_assets(channel, post_slug, month)
         recs = _build_recommendations(channel, missing, assets)
 
-    return {
+    if channel in {"sns", "instagram"}:
+        card_news_payload = build_card_news_slides(draft_text, channel)
+        try:
+            try:
+                from pipeline.editorial_lint import lint_card_news
+            except ModuleNotFoundError:
+                from editorial_lint import lint_card_news  # type: ignore
+            lint = lint_card_news(card_news_payload["slides"], draft_text)  # type: ignore[arg-type]
+            card_news_payload["meta"]["lint_result"] = "pass" if lint["can_publish"] else "fail"  # type: ignore[index]
+            card_news_payload["meta"]["lint_items"] = lint["items"]  # type: ignore[index]
+        except Exception:
+            card_news_payload["meta"]["lint_result"] = "warn"  # type: ignore[index]
+        slides = card_news_payload.get("slides", [])
+        if not slides or slides[0].get("role") != "hook" or slides[-1].get("role") != "cta":
+            raise ValueError("card-news slide schema invalid: hook/cta 누락")
+        _log_card_news(card_news_payload, request_id)
+
+    result = {
         "channel": channel,
         "text": text_out,
         "assets": assets,
@@ -354,6 +508,9 @@ def rewrite_for_channel(
         "post_slug": post_slug,
         "month": month,
     }
+    if card_news_payload is not None:
+        result.update(card_news_payload)
+    return result
 
 
 def _print_assets_report(result: dict) -> None:
@@ -427,12 +584,12 @@ def main() -> int:
         return 1
     draft_text = ""
     if draft_path.exists():
-        draft_text = draft_path.read_text(encoding="utf-8")
-
-    print(f"=== Channel Rewriter ({args.channel}) ===")
+        draft_text = draft_path.read_text(encoding="utf-8-sig")
 
     skip_text = args.assets_report or args.dry_run
-    if not skip_text:
+    if not args.json:
+        print(f"=== Channel Rewriter ({args.channel}) ===")
+    if not skip_text and not args.json:
         print("\n재가공 텍스트:")
 
     result = rewrite_for_channel(
@@ -444,9 +601,9 @@ def main() -> int:
     )
 
     # 자산 리포트
-    if args.post_slug:
+    if args.post_slug and not args.json:
         _print_assets_report(result)
-    elif skip_text:
+    elif skip_text and not args.json:
         print("\n[INFO] --post-slug 가 지정되지 않아 자산 체크를 건너뜁니다.")
 
     # 파일 출력
@@ -462,7 +619,6 @@ def main() -> int:
         print(f"\n저장 완료: {out_path}", file=sys.stderr)
 
     if args.json and not args.out:
-        print("\n=== JSON ===")
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
     # 누락 자산이 있으면 비-zero 반환은 하지 않음 (경고만) — 워크플로 계속 진행

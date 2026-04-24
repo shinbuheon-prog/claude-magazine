@@ -55,6 +55,7 @@ CHECK_IDS = [
     "request-id-log",
 ]
 OPTIONAL_CHECK_IDS = CHECK_IDS + ["article-standards"]
+CARD_NEWS_CHECK_IDS = ["card-news-structure", "card-news-density", "source-fidelity", "slide-count"]
 
 STATUS_ICON = {"pass": "✅", "fail": "❌", "warn": "⚠️ ", "skip": "➖"}
 
@@ -840,6 +841,163 @@ def _check_article_standards(
 
 
 # ---------------------------------------------------------------------------
+# 카드뉴스 전용 체크 (TASK_041)
+# ---------------------------------------------------------------------------
+
+
+def _extract_source_points(text: str) -> list[str]:
+    points: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("!"):
+            continue
+        stripped = SOURCE_ID_PATTERN.sub("", stripped).strip()
+        if len(stripped) >= 20:
+            points.append(stripped)
+    return points
+
+
+def check_card_news_structure(slides: list[dict[str, Any]]) -> dict[str, Any]:
+    if not slides:
+        return {
+            "id": "card-news-structure",
+            "status": "fail",
+            "message": "슬라이드가 비어 있음",
+        }
+
+    issues: list[str] = []
+    if slides[0].get("role") != "hook":
+        issues.append("첫 슬라이드 role 이 hook 이 아님")
+    if slides[-1].get("role") != "cta":
+        issues.append("마지막 슬라이드 role 이 cta 가 아님")
+    if not any(slide.get("role") == "body" for slide in slides[1:-1]):
+        issues.append("중간 body 슬라이드가 없음")
+
+    if issues:
+        return {
+            "id": "card-news-structure",
+            "status": "fail",
+            "message": f"구조 규칙 미통과 {len(issues)}건",
+            "details": issues,
+        }
+    return {
+        "id": "card-news-structure",
+        "status": "pass",
+        "message": "hook / body / cta 구조 확인",
+    }
+
+
+def check_card_news_density(slides: list[dict[str, Any]]) -> dict[str, Any]:
+    issues: list[str] = []
+    short_form = len(slides) <= 5
+    for slide in slides:
+        texts = [
+            str(slide.get("main_copy", "")).strip(),
+            str(slide.get("sub_copy", "")).strip(),
+            str(slide.get("highlight", "")).strip(),
+        ]
+        combined = " ".join(t for t in texts if t)
+        sentences = [s for s in re.split(r"(?<=[.!?。！？])\s+|\n+", combined) if s.strip()]
+        bullet_like = bool(re.search(r"[,/·•]|  ", combined))
+        has_number = bool(NUMBER_PATTERN.search(combined))
+        if slide.get("role") == "body":
+            if bullet_like and len(sentences) < 2:
+                issues.append(f"{slide.get('idx')}번: 리스트형인데 설명 문장 부족")
+            min_sentences = 2 if short_form else 3
+            if not bullet_like and len(sentences) < min_sentences:
+                issues.append(f"{slide.get('idx')}번: 서술형인데 최소 {min_sentences}문장 미만")
+            if has_number and len(sentences) < 2:
+                issues.append(f"{slide.get('idx')}번: 숫자 언급 대비 맥락 설명 부족")
+    if issues:
+        return {
+            "id": "card-news-density",
+            "status": "fail",
+            "message": f"밀도 규칙 미통과 {len(issues)}건",
+            "details": issues[:5],
+        }
+    return {
+        "id": "card-news-density",
+        "status": "pass",
+        "message": f"슬라이드 {len(slides)}건 밀도 규칙 통과",
+    }
+
+
+def check_source_fidelity(slides: list[dict[str, Any]], source_md: str) -> dict[str, Any]:
+    points = _extract_source_points(source_md)
+    if not points:
+        return {
+            "id": "source-fidelity",
+            "status": "warn",
+            "message": "원문 포인트 추출 실패 — coverage 계산 생략",
+        }
+
+    covered = 0
+    for point in points:
+        tokens = [tok for tok in re.findall(r"[가-힣A-Za-z0-9]{3,}", point)[:6]]
+        if not tokens:
+            continue
+        for slide in slides:
+            slide_text = " ".join(
+                str(slide.get(key, "")) for key in ("main_copy", "sub_copy", "highlight")
+            )
+            token_hits = sum(1 for tok in tokens if tok.lower() in slide_text.lower())
+            if token_hits >= min(2, len(tokens)):
+                covered += 1
+                break
+
+    coverage = covered / max(len(points), 1)
+    status = "pass" if coverage >= 0.8 else "fail"
+    return {
+        "id": "source-fidelity",
+        "status": status,
+        "message": f"원문 포인트 커버리지 {coverage:.0%} ({covered}/{len(points)})",
+    }
+
+
+def check_slide_count(slides: list[dict[str, Any]], source_char_len: int) -> dict[str, Any]:
+    count = len(slides)
+    if source_char_len <= 500:
+        expected = (5, 6)
+    elif source_char_len <= 1500:
+        expected = (7, 9)
+    else:
+        expected = (10, 13)
+
+    if expected[0] <= count <= expected[1]:
+        return {
+            "id": "slide-count",
+            "status": "pass",
+            "message": f"원문 {source_char_len}자 대비 {count}장 적정",
+        }
+    return {
+        "id": "slide-count",
+        "status": "fail",
+        "message": f"원문 {source_char_len}자 대비 {count}장 부적정 (권장 {expected[0]}~{expected[1]}장)",
+    }
+
+
+def lint_card_news(slides: list[dict[str, Any]], source_md: str) -> dict[str, Any]:
+    source_char_len = len(re.sub(r"\s+", "", source_md))
+    items = [
+        check_card_news_structure(slides),
+        check_card_news_density(slides),
+        check_source_fidelity(slides, source_md),
+        check_slide_count(slides, source_char_len),
+    ]
+    passed = sum(1 for it in items if it["status"] == "pass")
+    failed = sum(1 for it in items if it["status"] == "fail")
+    warnings = sum(1 for it in items if it["status"] in ("warn", "skip"))
+    return {
+        "passed": passed,
+        "failed": failed,
+        "warnings": warnings,
+        "items": items,
+        "can_publish": failed == 0,
+        "source_char_len": source_char_len,
+    }
+
+
+# ---------------------------------------------------------------------------
 # 출력 포맷
 # ---------------------------------------------------------------------------
 
@@ -878,8 +1036,11 @@ def format_report(result: dict, draft_path: str | None = None, ghost_post_id: st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="편집 체크리스트 자동 검증 (TASK_016)")
+    parser.add_argument("--mode", choices=["article", "card-news"], default="article")
     parser.add_argument("--draft", help="초안 마크다운 파일 경로")
     parser.add_argument("--ghost-post-id", help="Ghost 포스트 ID")
+    parser.add_argument("--slides-json", help="card-news 슬라이드 JSON 경로")
+    parser.add_argument("--source", help="card-news 원문 markdown 경로")
     parser.add_argument("--article-id", help="source_registry 조회용 article_id (선택)")
     parser.add_argument("--category", help="article_standards category (optional)")
     parser.add_argument(
@@ -892,8 +1053,10 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="네트워크 호출 없이 정적 체크만 수행")
     args = parser.parse_args()
 
-    if not args.draft and not args.ghost_post_id:
+    if args.mode == "article" and not args.draft and not args.ghost_post_id:
         parser.error("--draft 또는 --ghost-post-id 중 하나는 필수입니다")
+    if args.mode == "card-news" and (not args.slides_json or not args.source):
+        parser.error("--mode card-news 에서는 --slides-json 과 --source 가 필수입니다")
 
     # --only 유효성
     if args.only:
@@ -920,19 +1083,40 @@ def main() -> int:
         # title-body-match의 Sonnet 호출을 차단하기 위해 API 키를 임시 제거
         os.environ.pop("ANTHROPIC_API_KEY", None)
 
-    result = lint_draft(
-        draft_path or "",
-        only=args.only,
-        article_id=args.article_id,
-        text_override=text_override,
-        ghost_post_id=args.ghost_post_id,
-        category=args.category,
-    )
+    if args.mode == "card-news":
+        payload = json.loads(Path(args.slides_json).read_text(encoding="utf-8"))
+        slides = payload.get("slides", [])
+        source_md = Path(args.source).read_text(encoding="utf-8")
+        result = lint_card_news(slides, source_md)
+    else:
+        result = lint_draft(
+            draft_path or "",
+            only=args.only,
+            article_id=args.article_id,
+            text_override=text_override,
+            ghost_post_id=args.ghost_post_id,
+            category=args.category,
+        )
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(format_report(result, draft_path=draft_path, ghost_post_id=args.ghost_post_id))
+        if args.mode == "card-news":
+            print("=== 카드뉴스 체크리스트 검증 ===")
+            total = len(result["items"])
+            for idx, item in enumerate(result["items"], start=1):
+                icon = STATUS_ICON.get(item["status"], "?")
+                print(f"[{idx:>2}/{total}] {item['id'].ljust(22)} {icon} {item['message']}")
+                if item.get("details"):
+                    for detail in item["details"]:
+                        print(f"                                - {detail}")
+            print()
+            print(
+                f"=== 결과: {result['passed']} 통과 / {result['failed']} 실패 / {result['warnings']} 경고 ==="
+            )
+            print("발행 가능" if result["can_publish"] else "발행 불가 — 카드뉴스 밀도 게이트 미통과")
+        else:
+            print(format_report(result, draft_path=draft_path, ghost_post_id=args.ghost_post_id))
 
     if args.strict and result["failed"] > 0:
         return 1

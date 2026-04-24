@@ -69,3 +69,4 @@ python scripts/check_sns_assets.py --month {YYYY-MM} --post-slug {slug}
 ## 관련 스킬
 - 발행 전 검증: publish-gate
 - 원본 기사 검토: editorial-review
+- 실제 카드 구조 생성: card-news-builder
