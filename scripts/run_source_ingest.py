@@ -100,7 +100,7 @@ def main() -> int:
     print(f"  신규: {result['entries_new']}건")
     print(f"  기존: {result['entries_duplicate']}건")
     if result["dry_run"]:
-        print(f"  (dry-run — 등록 안 함)")
+        print("  (dry-run — 등록 안 함)")
     else:
         print(f"  등록 완료: {result['entries_registered']}건")
 

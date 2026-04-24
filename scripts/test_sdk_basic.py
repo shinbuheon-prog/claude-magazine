@@ -67,7 +67,7 @@ async def main():
         traceback.print_exc()
         return 1
 
-    print(f"\n[3/3] 결과 분석")
+    print("\n[3/3] 결과 분석")
     print(f"   메시지 타입들: {message_types_seen}")
     print(f"   응답 텍스트: {result_text[:200]}")
     print(f"   usage: {usage_info}")

@@ -3,7 +3,6 @@
 사용법: python codex_workflow.py [sync|list|update <TASK_ID> <status>]
 """
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 

@@ -136,9 +136,9 @@ def update_ghost_post(post_id: str, template: str = "light") -> dict[str, Any]:
     """
     # Lazy import — API 키 없이도 기본 HTML 조작은 가능해야 함
     try:
-        from pipeline.ghost_client import _headers, _request  # type: ignore
+        from pipeline.ghost_client import _request  # type: ignore
     except ModuleNotFoundError:
-        from ghost_client import _headers, _request  # type: ignore
+        from ghost_client import _request  # type: ignore
 
     if not (os.getenv("GHOST_ADMIN_API_URL") and os.getenv("GHOST_ADMIN_API_KEY")):
         raise RuntimeError(

@@ -62,7 +62,7 @@ class HuggingFaceProvider(IllustrationProvider):
                     json=payload,
                     timeout=self.timeout_s,
                 )
-            except requests.Timeout as exc:
+            except requests.Timeout:
                 last_error = IllustrationTimeoutError("HuggingFace image request timed out")
             except requests.RequestException as exc:
                 last_error = exc

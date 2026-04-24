@@ -12,7 +12,6 @@ Claude Code Skills 검증 스크립트 (TASK_030 보강)
     python scripts/validate_skills.py --strict
 """
 import argparse
-import io
 import re
 import sys
 from pathlib import Path

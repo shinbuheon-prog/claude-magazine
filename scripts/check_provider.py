@@ -120,19 +120,19 @@ def main() -> int:
         print(f"  {status} {name}  ({msg})")
     import_pass = all(ok for _, ok, _ in import_results)
 
-    print(f"\n[2단계] Mock provider 호출 검증")
+    print("\n[2단계] Mock provider 호출 검증")
     mock_ok = mock_call()
     print(f"  {'✅' if mock_ok else '❌'} Mock 호출")
 
     sdk_ok = None
     if args.call_sdk:
-        print(f"\n[3단계] SDK 실호출 (Haiku, Max 구독)")
+        print("\n[3단계] SDK 실호출 (Haiku, Max 구독)")
         sdk_ok = sdk_call()
         print(f"  {'✅' if sdk_ok else '❌'} SDK Haiku 호출")
 
     api_ok = None
     if args.call_api:
-        print(f"\n[4단계] API 실호출 (Haiku)")
+        print("\n[4단계] API 실호출 (Haiku)")
         api_ok = api_call()
         print(f"  {'✅' if api_ok else '❌'} API Haiku 호출")
 

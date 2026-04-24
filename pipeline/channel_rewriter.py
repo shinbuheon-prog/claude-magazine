@@ -17,9 +17,7 @@
 from __future__ import annotations
 
 import argparse
-import io
 import json
-import os
 import re
 import sys
 from datetime import datetime
@@ -360,7 +358,6 @@ def _log_card_news(payload: dict[str, object], request_id: str | None) -> None:
 
 def _haiku_rewrite(draft_text: str, channel: str) -> str:
     """Haiku API 호출로 텍스트 재가공 (기존 로직)."""
-    import anthropic  # lazy import so --assets-report 모드는 의존성 없음
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -514,7 +511,6 @@ def rewrite_for_channel(
 
 
 def _print_assets_report(result: dict) -> None:
-    channel = result["channel"]
     post_slug = result.get("post_slug") or "(no-slug)"
     month = result.get("month")
     print(f"\n자산 체크 (web/public/sns/{month}/{post_slug}-*):")

@@ -223,8 +223,8 @@ def _cmd_register(
         print(f"  ✅ JWT 토큰 생성 성공 (length={len(token)}, prefix={token[:16]}...)")
         print(f"  • POST {_admin_api_base()}/webhooks/")
         print("  • Headers:")
-        print(f"     Authorization: Ghost <JWT>")
-        print(f"     Content-Type: application/json")
+        print("     Authorization: Ghost <JWT>")
+        print("     Content-Type: application/json")
         print("  • Body:")
         print(
             f"     {{'webhooks': [{{'event': {event!r}, "

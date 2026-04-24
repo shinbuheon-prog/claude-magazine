@@ -196,7 +196,7 @@ def _raise_for_auth(resp) -> None:
     """401/403 응답 시 즉시 안내 후 종료."""
     if resp.status_code in (401, 403):
         print(f"     ❌ HTTP {resp.status_code} — 인증 실패")
-        print(f"        API 키 확인 필요: N8N_API_KEY 가 만료되었거나 권한이 부족합니다.")
+        print("        API 키 확인 필요: N8N_API_KEY 가 만료되었거나 권한이 부족합니다.")
         print(f"        응답: {_safe_body(resp)}")
         sys.exit(1)
 
@@ -329,7 +329,7 @@ def import_workflows(
             if existing_id is not None:
                 print(f"  ℹ️  기존 워크플로우 발견 (id: {existing_id}, 이름: \"{wf_name}\")")
                 if not overwrite:
-                    print(f"  ⏭  스킵 — 이미 존재함 (--overwrite 없음)")
+                    print("  ⏭  스킵 — 이미 존재함 (--overwrite 없음)")
                     skip += 1
                     continue
                 result = client.update_workflow(existing_id, payload)

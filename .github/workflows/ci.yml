@@ -152,12 +152,18 @@ jobs:
           from pathlib import Path
 
           bad = []
-          skip_parts = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
+          # tasks/: 태스크 스펙은 mojibake 예시를 문서화 목적으로 포함할 수 있어 제외
+          # (예: TASK_052가 mojibake 감지 로직 자체를 기술)
+          skip_parts = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache", "tasks"}
+          # 의도적 BOM/mojibake 테스트 fixture 제외
+          skip_files = {"tests/fixtures/drafts/draft_mojibake.md"}
           suffixes = {".md", ".py", ".yml", ".yaml", ".json", ".txt", ".jsx", ".js"}
           markers = ("\ufffd", "\u00ef\u00bf\u00bd")
 
           for path in Path(".").rglob("*"):
               if any(part in skip_parts or part.startswith(".tmp_") for part in path.parts):
+                  continue
+              if path.as_posix() in skip_files:
                   continue
               if not path.is_file() or path.suffix not in suffixes:
                   continue

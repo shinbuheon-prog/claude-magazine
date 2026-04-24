@@ -257,7 +257,6 @@ def fetch_feed(url: str, timeout: int = NETWORK_TIMEOUT) -> list[Any]:
 
     # feedparser는 자체 timeout 지원 안함 → urllib로 우회
     try:
-        import urllib.request
         import socket
         socket.setdefaulttimeout(timeout)
         # feedparser가 requests 없이도 HTTP fetch 가능 (내장)
@@ -513,7 +512,7 @@ def ingest_feeds(
                 continue
 
             try:
-                source_id = add_source(
+                add_source(
                     url=entry_url,
                     publisher=name,
                     content_preview=preview,

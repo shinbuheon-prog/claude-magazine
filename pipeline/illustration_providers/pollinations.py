@@ -51,7 +51,7 @@ class PollinationsProvider(IllustrationProvider):
                     headers={"User-Agent": "Claude-Magazine-KR/1.0"},
                     timeout=self.timeout_s,
                 )
-            except requests.Timeout as exc:
+            except requests.Timeout:
                 last_error = IllustrationTimeoutError("Pollinations request timed out")
             except requests.RequestException as exc:
                 last_error = exc

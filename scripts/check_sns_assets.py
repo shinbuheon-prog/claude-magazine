@@ -172,11 +172,13 @@ def main() -> int:
     # licenses.json 의 key 는 "YYYY-MM/filename.png" 상대 경로
     scope_prefix = f"{args.month}/"
     if args.post_slug:
-        scope_filter = lambda k: k.startswith(scope_prefix) and Path(k).name.startswith(
-            f"{args.post_slug}-"
-        )
+        def scope_filter(k: str) -> bool:
+            return k.startswith(scope_prefix) and Path(k).name.startswith(
+                f"{args.post_slug}-"
+            )
     else:
-        scope_filter = lambda k: k.startswith(scope_prefix)
+        def scope_filter(k: str) -> bool:
+            return k.startswith(scope_prefix)
 
     scoped_licenses = {k: v for k, v in licenses.items() if scope_filter(k)}
     missing_files: list[str] = []

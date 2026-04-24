@@ -82,7 +82,7 @@ def render_playbook(stage: str, failure_class: str | None, context: dict[str, An
     recovery_steps = entry.get("recovery") if entry else [
         "Inspect the latest logs and state file",
         "Run scripts/check_env.py --dry-run to verify local configuration",
-        f"Reset and rerun the stage once the root cause is fixed",
+        "Reset and rerun the stage once the root cause is fixed",
     ]
     month = context.get("month", "unknown")
     state_path = context.get("state_path", f"reports/publish_state_{month}.json")

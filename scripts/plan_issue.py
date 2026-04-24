@@ -333,7 +333,7 @@ def main() -> int:
     p_st.add_argument("--month", required=True)
     p_st.add_argument("--json", action="store_true")
 
-    p_ls = sub.add_parser("list", help="이슈 목록")
+    sub.add_parser("list", help="이슈 목록")
 
     p_val = sub.add_parser("validate", help="플랜 유효성 검증")
     p_val.add_argument("--month", required=True)

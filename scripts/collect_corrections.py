@@ -104,7 +104,6 @@ def _auto_classify(candidate: CorrectionCandidate) -> tuple[str, str, str | None
     removed = candidate.removed
     added = candidate.added
     lowered_removed = removed.lower()
-    lowered_added = added.lower()
     note = "auto classified from git diff"
 
     if any(token in lowered_removed for token in ("최초", "유일", "완벽", "압도", "폭발")):

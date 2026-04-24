@@ -146,7 +146,7 @@ def run_puppeteer_pdf(month: str) -> Path | None:
     output_path = OUTPUT_DIR / f"claude-magazine-{month}.pdf"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"📄 Puppeteer PDF 생성 중...")
+    print("📄 Puppeteer PDF 생성 중...")
     try:
         subprocess.run(
             ["node", str(ROOT / "scripts" / "generate_pdf.js"), "--month", month],
@@ -174,7 +174,6 @@ def add_page_numbers(pdf_path: Path) -> bool:
     """
     try:
         from pypdf import PdfReader, PdfWriter  # type: ignore
-        from pypdf.generic import NameObject
     except ImportError:
         print("⏭  pypdf 미설치 — 페이지 번호 오버레이 skip", file=sys.stderr)
         return True
@@ -219,7 +218,7 @@ def main() -> int:
         print(f"❌ {exc}", file=sys.stderr)
         return 1
 
-    print(f"[1/5] 플랜 로드 완료")
+    print("[1/5] 플랜 로드 완료")
     print(f"   테마: {plan.get('theme', '')}")
     print(f"   꼭지: {len(plan.get('articles', []))}개\n")
 
@@ -229,24 +228,24 @@ def main() -> int:
     for i in issues:
         print(f"   - {i}")
     if not ok and not args.force and not args.dry_run:
-        print(f"\n❌ 검증 실패 — --force 또는 --dry-run 으로 재시도하세요.", file=sys.stderr)
+        print("\n❌ 검증 실패 — --force 또는 --dry-run 으로 재시도하세요.", file=sys.stderr)
         return 1
 
     if args.dry_run:
-        print(f"\n⏭  --dry-run 모드 — PDF 생성 스킵")
+        print("\n⏭  --dry-run 모드 — PDF 생성 스킵")
         return 0
 
     # 3. 이슈 JSON export
-    print(f"\n[3/5] 이슈 JSON 내보내기")
+    print("\n[3/5] 이슈 JSON 내보내기")
     export_issue_json(plan, args.month)
 
     # 4. Vite 빌드
-    print(f"\n[4/5] Vite 빌드")
+    print("\n[4/5] Vite 빌드")
     if not run_vite_build(skip=args.skip_build):
         return 1
 
     # 5. Puppeteer PDF
-    print(f"\n[5/5] PDF 생성")
+    print("\n[5/5] PDF 생성")
     pdf_path = run_puppeteer_pdf(args.month)
     if not pdf_path:
         return 1
@@ -255,7 +254,7 @@ def main() -> int:
     if not args.no_numbers:
         add_page_numbers(pdf_path)
 
-    print(f"\n🎉 월간 PDF 컴파일 완료")
+    print("\n🎉 월간 PDF 컴파일 완료")
     print(f"   파일: {pdf_path}")
     return 0
 

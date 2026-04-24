@@ -2,7 +2,6 @@
 brief_generator 프롬프트로 SDK 직접 호출 — 문제 지점 분리 테스트
 """
 import asyncio
-import os
 import sys
 from pathlib import Path
 
