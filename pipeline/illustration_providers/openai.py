@@ -6,7 +6,13 @@ from pathlib import Path
 
 import requests
 
-from . import IllustrationProvider, IllustrationResult
+from . import (
+    IllustrationAuthError,
+    IllustrationProvider,
+    IllustrationRateLimitError,
+    IllustrationResult,
+    IllustrationTimeoutError,
+)
 
 OPENAI_IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations"
 DEFAULT_MODEL = "gpt-image-1"
@@ -40,7 +46,7 @@ class OpenAIIllustrationProvider(IllustrationProvider):
     def __init__(self) -> None:
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for the openai illustration provider")
+            raise IllustrationAuthError("OPENAI_API_KEY is required for the openai illustration provider")
         self.api_key = api_key
         self.model = os.getenv("OPENAI_IMAGE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
         self.quality = os.getenv("OPENAI_IMAGE_QUALITY", "low").strip().lower() or "low"
@@ -65,15 +71,25 @@ class OpenAIIllustrationProvider(IllustrationProvider):
             "quality": self.quality,
             "moderation": self.moderation,
         }
-        response = requests.post(
-            OPENAI_IMAGE_ENDPOINT,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=self.timeout_s,
-        )
+        try:
+            response = requests.post(
+                OPENAI_IMAGE_ENDPOINT,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self.timeout_s,
+            )
+        except requests.Timeout as exc:
+            raise IllustrationTimeoutError("OpenAI image request timed out") from exc
+        except requests.RequestException as exc:
+            raise RuntimeError(f"OpenAI image request failed: {exc}") from exc
+
+        if response.status_code in {401, 403}:
+            raise IllustrationAuthError("OpenAI image request was not authorized")
+        if response.status_code == 429:
+            raise IllustrationRateLimitError("OpenAI image request hit a rate limit")
         response.raise_for_status()
         body = response.json()
         data = body.get("data") or []

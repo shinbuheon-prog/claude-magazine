@@ -50,7 +50,7 @@ TASK_043 | 이미지 생성 provider 매트릭스 + illustration_hook 어댑터 
 TASK_044 | Prompt Caching 도입 (fact_checker·editorial_lint·brief_generator) | merged
 TASK_045 | Citations API 이중 운영 도입 (source-id 체크 보강) | merged
 TASK_046 | Figma 실구현 (무료 REST API, MCP 없이, personal drafts + paste 패키지) | merged
-TASK_047 | 이미지 backend 실구현 (무료 전용: Pollinations + HuggingFace, fallback chain) | implemented
+TASK_047 | 이미지 backend 실구현 (무료 전용: Pollinations + HuggingFace, fallback chain) | merged
 TASK_048 | 운영 관측 위젯 — cache·citations·illustration provider (TASK_028 대시보드 확장) | merged
 TASK_049 | editorial_lint pytest 스위트 정비 (15 체크 커버리지 ≥80%) | merged
 TASK_050 | publish_monthly UX 보강 (--status·--reset-stage·--from-stage + 텔레메트리) | implemented

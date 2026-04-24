@@ -5,6 +5,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+class IllustrationError(Exception):
+    pass
+
+
+class IllustrationRateLimitError(IllustrationError):
+    pass
+
+
+class IllustrationAuthError(IllustrationError):
+    pass
+
+
+class IllustrationTimeoutError(IllustrationError):
+    pass
+
+
 @dataclass(slots=True)
 class IllustrationResult:
     image_path: Path
