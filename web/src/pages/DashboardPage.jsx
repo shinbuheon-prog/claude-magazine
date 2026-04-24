@@ -14,15 +14,44 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { THEME, TYPE } from '../theme';
+import { STATUS, THEME, TYPE } from '../theme';
 
 const EMPTY_METRICS = {
   period: { days: 30 },
-  cost: { total_usd: 0, per_article_usd: 0, article_count: 0, model_distribution: [] },
+  sources: { ghost: false, langfuse: false },
+  cost: { total_usd: 0, total_krw: 0, per_article_usd: 0, article_count: 0, model_distribution: [] },
   time: { ai_total_sec: 0, editor_total_sec: 0, ai_editor_ratio: null, editor_time_estimated: true },
   quality: { lint_pass_rate: null, lint_pass_count: 0, lint_checked_articles: 0, factcheck_failures: 0, corrections_total: 0 },
   reach: { published_articles: 0, newsletter_recipients: 0, available: { ghost: false } },
   operations: { publish_runs: 0, publish_failures: 0 },
+  cache: {
+    fact_checker: {
+      runs: 0,
+      runs_with_cache_enabled: 0,
+      total_cache_creation_tokens: 0,
+      total_cache_read_tokens: 0,
+      cache_hit_rate: 0,
+      estimated_saved_usd: 0,
+      trend_14d: [],
+    },
+    other_pipelines: [],
+  },
+  citations: {
+    article_runs_with_citations_check: 0,
+    pass: 0,
+    warn_missing: 0,
+    warn_mismatch: 0,
+    fail: 0,
+    pass_rate: null,
+    trend_14d: [],
+  },
+  illustration: {
+    provider_distribution: {},
+    monthly_cost_usd: 0,
+    monthly_cost_by_provider: {},
+    budget_cap_usd: 5,
+    budget_utilization: 0,
+  },
   per_article: [],
 };
 
@@ -37,14 +66,15 @@ function formatUsd(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
+function formatPercent(value) {
+  if (value == null) return 'n/a';
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
 function formatSeconds(value) {
   const seconds = Number(value || 0);
-  if (seconds >= 3600) {
-    return `${(seconds / 3600).toFixed(1)}h`;
-  }
-  if (seconds >= 60) {
-    return `${(seconds / 60).toFixed(1)}m`;
-  }
+  if (seconds >= 3600) return `${(seconds / 3600).toFixed(1)}h`;
+  if (seconds >= 60) return `${(seconds / 60).toFixed(1)}m`;
   return `${seconds.toFixed(0)}s`;
 }
 
@@ -53,7 +83,12 @@ function availabilityLabel(enabled, yes = 'live', no = 'partial') {
 }
 
 function StatCard({ label, value, hint, tone = 'default' }) {
-  const toneClass = tone === 'accent' ? 'border-[#C96442] bg-[#FFF4EF]' : 'border-gray-200 bg-white';
+  const toneClass =
+    tone === 'accent'
+      ? 'border-[#C96442] bg-[#FFF4EF]'
+      : tone === 'warning'
+        ? 'border-[#D97706] bg-[#FFF7ED]'
+        : 'border-gray-200 bg-white';
   return (
     <div className={`rounded-3xl border p-6 shadow-sm ${toneClass}`}>
       <p className="text-xs font-bold uppercase tracking-[0.25em] text-gray-400">{label}</p>
@@ -78,6 +113,15 @@ function Panel({ title, kicker, children, aside }) {
   );
 }
 
+function ProgressBar({ value, color }) {
+  const pct = Math.max(0, Math.min(Number(value || 0), 1));
+  return (
+    <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="h-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: color }} />
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [loading, setLoading] = useState(true);
@@ -93,9 +137,7 @@ export default function DashboardPage() {
       for (const path of candidates) {
         try {
           const response = await fetch(path, { cache: 'no-store' });
-          if (!response.ok) {
-            continue;
-          }
+          if (!response.ok) continue;
           const data = await response.json();
           if (!cancelled) {
             setMetrics({ ...EMPTY_METRICS, ...data });
@@ -113,9 +155,7 @@ export default function DashboardPage() {
     }
 
     loadMetrics().finally(() => {
-      if (!cancelled) {
-        setLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     });
 
     return () => {
@@ -137,7 +177,7 @@ export default function DashboardPage() {
   const qualityBars = useMemo(() => {
     const lintPassRate = metrics.quality?.lint_pass_rate;
     const lintPct = lintPassRate == null ? 0 : Math.round(lintPassRate * 100);
-    const failPct = 100 - lintPct;
+    const failPct = Math.max(0, 100 - lintPct);
     return [
       { name: 'Lint pass', value: lintPct, fill: THEME.lineC },
       { name: 'Lint fail', value: failPct, fill: THEME.accent },
@@ -145,10 +185,51 @@ export default function DashboardPage() {
     ];
   }, [metrics.quality]);
 
+  const cacheTrend = useMemo(
+    () =>
+      (metrics.cache?.fact_checker?.trend_14d || []).map((row) => ({
+        date: row.date?.slice(5) || '',
+        hit_rate: Number(row.hit_rate || 0) * 100,
+        total: Number(row.total || 0),
+      })),
+    [metrics.cache],
+  );
+
+  const citationsPie = useMemo(
+    () => [
+      { name: 'Pass', value: Number(metrics.citations?.pass || 0), fill: THEME.lineC },
+      { name: 'Warn missing', value: Number(metrics.citations?.warn_missing || 0), fill: STATUS.warning },
+      { name: 'Warn mismatch', value: Number(metrics.citations?.warn_mismatch || 0), fill: THEME.lineB },
+      { name: 'Fail', value: Number(metrics.citations?.fail || 0), fill: STATUS.danger },
+    ],
+    [metrics.citations],
+  );
+
+  const citationsTrend = useMemo(
+    () =>
+      (metrics.citations?.trend_14d || []).map((row) => ({
+        date: row.date?.slice(5) || '',
+        pass: Number(row.pass || 0),
+        warn: Number(row.warn_missing || 0) + Number(row.warn_mismatch || 0),
+        fail: Number(row.fail || 0),
+      })),
+    [metrics.citations],
+  );
+
+  const illustrationProviders = useMemo(
+    () =>
+      Object.entries(metrics.illustration?.provider_distribution || {}).map(([provider, count]) => ({
+        provider,
+        count: Number(count || 0),
+      })),
+    [metrics.illustration],
+  );
+
+  const utilization = Number(metrics.illustration?.budget_utilization || 0);
+  const utilizationTone = utilization >= 0.8 ? 'warning' : 'default';
+  const utilizationColor = utilization >= 0.8 ? STATUS.warning : THEME.lineC;
   const ratioValue =
-    metrics.time?.ai_editor_ratio == null
-      ? 'n/a'
-      : `1:${Number(metrics.time.ai_editor_ratio).toFixed(2)}`;
+    metrics.time?.ai_editor_ratio == null ? 'n/a' : `1:${Number(metrics.time.ai_editor_ratio).toFixed(2)}`;
 
   return (
     <div className="mx-auto max-w-[1180px] px-4 py-10">
@@ -156,12 +237,10 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-2xl">
             <p className={`${TYPE.category} text-[#C96442]`}>Operations Dashboard</p>
-            <h1 className="mt-3 text-4xl font-black tracking-tight text-[#1B1F3B]">
-              Claude Magazine 운영 대시보드
-            </h1>
+            <h1 className="mt-3 text-4xl font-black tracking-tight text-[#1B1F3B]">Claude Magazine 운영 대시보드</h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-gray-600">
-              Ghost 또는 Langfuse가 비어 있어도 로그와 draft 파일만으로 부분 집계를 보여줍니다.
-              Miessler식 핵심 지표인 AI:Human 비율, 기사당 비용, 월간 총비용을 먼저 배치했습니다.
+              로그와 산출물만으로도 비용, 게이트 품질, 캐시 효율, citations 경고 추세, 일러스트 예산 상태를 한눈에 보도록
+              정리했습니다.
             </p>
           </div>
           <div className="rounded-3xl border border-white/70 bg-white/70 px-5 py-4 text-right text-sm text-gray-600 backdrop-blur">
@@ -191,16 +270,12 @@ export default function DashboardPage() {
         <StatCard
           label="Monthly API Cost"
           value={formatUsd(metrics.cost?.total_usd)}
-          hint={`≈ ₩${Number(metrics.cost?.total_krw || 0).toLocaleString('ko-KR')}`}
+          hint={`₩${Number(metrics.cost?.total_krw || 0).toLocaleString('ko-KR')}`}
         />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <Panel
-          title="기사별 비용 추이"
-          kicker="Cost"
-          aside={`${costTrend.length} articles`}
-        >
+        <Panel title="기사별 비용 추이" kicker="Cost" aside={`${costTrend.length} articles`}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={costTrend}>
@@ -215,11 +290,7 @@ export default function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel
-          title="모델별 비용 분포"
-          kicker="Model Mix"
-          aside={metrics.cost?.estimated ? 'estimated pricing' : 'live pricing'}
-        >
+        <Panel title="모델별 비용 분포" kicker="Model Mix" aside={metrics.cost?.estimated ? 'estimated pricing' : 'live pricing'}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -247,11 +318,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <Panel
-          title="품질 게이트"
-          kicker="Quality"
-          aside={`${metrics.quality?.lint_checked_articles || 0} checked`}
-        >
+        <Panel title="품질 게이트" kicker="Quality" aside={`${metrics.quality?.lint_checked_articles || 0} checked`}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={qualityBars}>
@@ -269,27 +336,133 @@ export default function DashboardPage() {
           </div>
         </Panel>
 
-        <Panel
-          title="Reach + Operations"
-          kicker="Signals"
-          aside={metrics.reach?.available?.ghost ? 'ghost connected' : 'local logs only'}
-        >
+        <Panel title="Reach + Operations" kicker="Signals" aside={metrics.reach?.available?.ghost ? 'ghost connected' : 'local logs only'}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl bg-[#F8F7F4] p-5">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-gray-400">Reach</p>
               <p className="mt-3 text-3xl font-black text-[#1B1F3B]">{metrics.reach?.published_articles || 0}</p>
               <p className="mt-2 text-sm text-gray-500">published articles</p>
-              <p className="mt-4 text-sm text-gray-500">
-                Newsletter recipients: {metrics.reach?.newsletter_recipients || 0}
-              </p>
+              <p className="mt-4 text-sm text-gray-500">Newsletter recipients: {metrics.reach?.newsletter_recipients || 0}</p>
             </div>
             <div className="rounded-2xl bg-[#FFF4EF] p-5">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-gray-400">Operations</p>
               <p className="mt-3 text-3xl font-black text-[#1B1F3B]">{metrics.operations?.publish_runs || 0}</p>
               <p className="mt-2 text-sm text-gray-500">publish runs</p>
-              <p className="mt-4 text-sm text-gray-500">
-                Failures: {metrics.operations?.publish_failures || 0}
+              <p className="mt-4 text-sm text-gray-500">Failures: {metrics.operations?.publish_failures || 0}</p>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <Panel
+          title="Prompt Caching"
+          kicker="Cache"
+          aside={`${metrics.cache?.fact_checker?.runs_with_cache_enabled || 0}/${metrics.cache?.fact_checker?.runs || 0} cached`}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <StatCard
+              label="Hit Rate"
+              value={formatPercent(metrics.cache?.fact_checker?.cache_hit_rate)}
+              hint={`${Number(metrics.cache?.fact_checker?.total_cache_read_tokens || 0).toLocaleString('ko-KR')} cache-read tokens`}
+            />
+            <StatCard
+              label="Saved USD"
+              value={formatUsd(metrics.cache?.fact_checker?.estimated_saved_usd)}
+              hint={`${Number(metrics.cache?.fact_checker?.total_cache_creation_tokens || 0).toLocaleString('ko-KR')} cache-create tokens`}
+            />
+          </div>
+          <div className="mt-5 h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={cacheTrend}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ECE7DC" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9CA3AF' }} />
+                <Tooltip formatter={(value, name) => [name === 'hit_rate' ? `${Number(value).toFixed(1)}%` : value, name]} />
+                <Legend />
+                <Line type="monotone" dataKey="hit_rate" name="Hit rate %" stroke={THEME.lineC} strokeWidth={3} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 grid gap-2 text-sm text-gray-500">
+            {(metrics.cache?.other_pipelines || []).map((item) => (
+              <p key={item.pipeline}>
+                {item.pipeline}: {item.cache_enabled_runs}/{item.runs} cache-enabled runs
               </p>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel
+          title="Citations Cross-Check"
+          kicker="Citations"
+          aside={`${metrics.citations?.article_runs_with_citations_check || 0} article runs`}
+        >
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={citationsPie} dataKey="value" nameKey="name" innerRadius={48} outerRadius={78} paddingAngle={2}>
+                    {citationsPie.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={citationsTrend}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ECE7DC" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9CA3AF' }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="pass" stackId="citations" fill={THEME.lineC} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="warn" stackId="citations" fill={STATUS.warning} />
+                  <Bar dataKey="fail" stackId="citations" fill={STATUS.danger} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <p className="mt-4 text-sm text-gray-500">Pass rate: {formatPercent(metrics.citations?.pass_rate)}</p>
+        </Panel>
+      </div>
+
+      <div className="mt-6">
+        <Panel
+          title="Illustration Budget"
+          kicker="Illustration"
+          aside={utilization >= 0.8 ? 'budget warning' : 'within cap'}
+        >
+          <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+            <div className="space-y-4">
+              <StatCard
+                label="Monthly Cost"
+                value={formatUsd(metrics.illustration?.monthly_cost_usd)}
+                hint={`Cap ${formatUsd(metrics.illustration?.budget_cap_usd)}`}
+                tone={utilizationTone}
+              />
+              <div className="rounded-3xl border border-gray-200 bg-white p-5">
+                <div className="mb-2 flex items-center justify-between text-sm text-gray-500">
+                  <span>Budget utilization</span>
+                  <span style={{ color: utilizationColor }}>{formatPercent(metrics.illustration?.budget_utilization)}</span>
+                </div>
+                <ProgressBar value={metrics.illustration?.budget_utilization} color={utilizationColor} />
+              </div>
+            </div>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={illustrationProviders}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ECE7DC" />
+                  <XAxis dataKey="provider" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#9CA3AF' }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill={utilizationColor} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </Panel>
@@ -336,13 +509,11 @@ export default function DashboardPage() {
         </div>
       </Panel>
 
-      {/* TASK_037: 월간 발행 진행률 위젯 */}
       <MonthlyProgressWidget />
     </div>
   );
 }
 
-// ── 월간 발행 진행률 위젯 (TASK_037) ─────────────────
 function MonthlyProgressWidget() {
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState(null);
@@ -352,24 +523,23 @@ function MonthlyProgressWidget() {
   });
 
   useEffect(() => {
-    // 정적 JSON 경로에서 로드 (compile_monthly_pdf.py가 생성)
     fetch(`/issue/${month}.json`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status}`);
-        return r.json();
+      .then((response) => {
+        if (!response.ok) throw new Error(`${response.status}`);
+        return response.json();
       })
       .then(setPlan)
-      .catch((e) => setError(e.message));
+      .catch((err) => setError(err.message));
   }, [month]);
 
   const counts = useMemo(() => {
     if (!plan?.articles) return {};
-    const c = {};
-    plan.articles.forEach((a) => {
-      const s = a.status || 'planning';
-      c[s] = (c[s] || 0) + 1;
+    const next = {};
+    plan.articles.forEach((article) => {
+      const key = article.status || 'planning';
+      next[key] = (next[key] || 0) + 1;
     });
-    return c;
+    return next;
   }, [plan]);
 
   const total = plan?.articles?.length || 0;
@@ -387,12 +557,12 @@ function MonthlyProgressWidget() {
   ];
 
   return (
-    <Panel title={`월간 발행 진행률 — ${month}`} kicker="TASK_037">
+    <Panel title={`월간 발행 진행률 · ${month}`} kicker="TASK_037">
       <div className="mb-4 flex items-center gap-3">
         <input
           type="text"
           value={month}
-          onChange={(e) => setMonth(e.target.value)}
+          onChange={(event) => setMonth(event.target.value)}
           placeholder="YYYY-MM"
           className="rounded-lg border border-gray-200 px-3 py-1 text-sm"
         />
@@ -401,7 +571,7 @@ function MonthlyProgressWidget() {
 
       {error && (
         <p className="text-sm text-gray-400">
-          이슈 JSON 없음 (<code>/issue/{month}.json</code>) — compile_monthly_pdf.py로 먼저 생성하세요.
+          이슈 JSON이 없습니다 (<code>/issue/{month}.json</code>). 월간 계획을 먼저 생성해야 합니다.
         </p>
       )}
 
@@ -415,10 +585,7 @@ function MonthlyProgressWidget() {
               </span>
             </div>
             <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-              <div
-                className="h-full transition-all"
-                style={{ width: `${progressPct}%`, backgroundColor: THEME.accent }}
-              />
+              <div className="h-full transition-all" style={{ width: `${progressPct}%`, backgroundColor: THEME.accent }} />
             </div>
           </div>
 
@@ -438,30 +605,28 @@ function MonthlyProgressWidget() {
               <thead>
                 <tr className="text-left text-xs uppercase text-gray-500">
                   <th className="px-3 py-2">Slug</th>
-                  <th className="px-3 py-2">카테고리</th>
-                  <th className="px-3 py-2">페이지</th>
-                  <th className="px-3 py-2">담당</th>
-                  <th className="px-3 py-2">상태</th>
+                  <th className="px-3 py-2">Category</th>
+                  <th className="px-3 py-2">Pages</th>
+                  <th className="px-3 py-2">Assignee</th>
+                  <th className="px-3 py-2">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {plan.articles.map((a) => (
-                  <tr key={a.slug} className="border-t border-gray-100">
-                    <td className="px-3 py-2 font-semibold">{a.slug}</td>
-                    <td className="px-3 py-2">{a.category}</td>
-                    <td className="px-3 py-2">{a.target_pages}p</td>
-                    <td className="px-3 py-2 text-gray-500">{a.assignee || '-'}</td>
+                {plan.articles.map((article) => (
+                  <tr key={article.slug} className="border-t border-gray-100">
+                    <td className="px-3 py-2 font-semibold">{article.slug}</td>
+                    <td className="px-3 py-2">{article.category}</td>
+                    <td className="px-3 py-2">{article.target_pages}p</td>
+                    <td className="px-3 py-2 text-gray-500">{article.assignee || '-'}</td>
                     <td className="px-3 py-2">
                       <span
                         className="rounded-full px-2 py-0.5 text-xs"
                         style={{
-                          backgroundColor:
-                            statusOrder.find(([k]) => k === a.status)?.[2] + '22' || '#f3f4f6',
-                          color:
-                            statusOrder.find(([k]) => k === a.status)?.[2] || '#6b7280',
+                          backgroundColor: `${statusOrder.find(([key]) => key === article.status)?.[2] || '#6B7280'}22`,
+                          color: statusOrder.find(([key]) => key === article.status)?.[2] || '#6B7280',
                         }}
                       >
-                        {a.status}
+                        {article.status}
                       </span>
                     </td>
                   </tr>

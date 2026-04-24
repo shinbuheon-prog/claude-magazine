@@ -89,12 +89,27 @@ def _fmt_seconds(value: float | int | None) -> str:
     return f"{minutes}m"
 
 
+def _fmt_pct(value: float | int | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{round(float(value) * 100, 1)}%"
+
+
+def _fmt_trend(trend: list[dict[str, Any]], field: str) -> str:
+    compact = [f"{row['date'][5:]}:{row.get(field, 0)}" for row in trend if row.get("total", 0) or row.get(field, 0)]
+    return ", ".join(compact) if compact else "no recent data"
+
+
 def _markdown_output(metrics: dict[str, Any]) -> str:
     cost = metrics["cost"]
     time = metrics["time"]
     quality = metrics["quality"]
     reach = metrics["reach"]
     operations = metrics["operations"]
+    cache = metrics.get("cache", {})
+    citations = metrics.get("citations", {})
+    illustration = metrics.get("illustration", {})
+    fact_checker = cache.get("fact_checker", {})
 
     lines = [
         f"# Claude Magazine Metrics ({metrics['period']['days']}d)",
@@ -113,22 +128,60 @@ def _markdown_output(metrics: dict[str, Any]) -> str:
         f"- Factcheck failures: {quality['factcheck_failures']}",
         f"- Corrections: {quality['corrections_total']}",
         "",
-        "## Reach",
+        "## Prompt Caching",
         "",
-        f"- Published articles: {reach['published_articles']}",
-        f"- Newsletter recipients: {reach['newsletter_recipients']}",
-        f"- Ghost analytics available: {reach['available']['ghost']}",
-        "",
-        "## Operations",
-        "",
-        f"- Publish runs: {operations['publish_runs']}",
-        f"- Publish failures: {operations['publish_failures']}",
-        "",
-        "## Per Article",
-        "",
-        "| Article | Cost (USD) | AI Time | Editor Time | Ratio | Publish |",
-        "| --- | ---: | ---: | ---: | ---: | --- |",
+        f"- fact_checker cached runs: {fact_checker.get('runs_with_cache_enabled', 0)}/{fact_checker.get('runs', 0)}",
+        f"- Cache hit rate: {_fmt_pct(fact_checker.get('cache_hit_rate'))}",
+        f"- Cache creation tokens: {fact_checker.get('total_cache_creation_tokens', 0):,}",
+        f"- Cache read tokens: {fact_checker.get('total_cache_read_tokens', 0):,}",
+        f"- Estimated saved USD: ${fact_checker.get('estimated_saved_usd', 0):.4f}",
     ]
+
+    for item in cache.get("other_pipelines", []):
+        lines.append(
+            f"- {item['pipeline']}: {item['cache_enabled_runs']}/{item['runs']} cache-enabled runs"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Citations Cross-Check",
+            "",
+            f"- Runs with citations check: {citations.get('article_runs_with_citations_check', 0)}",
+            (
+                f"- pass: {citations.get('pass', 0)} / warn-missing: {citations.get('warn_missing', 0)} / "
+                f"warn-mismatch: {citations.get('warn_mismatch', 0)} / fail: {citations.get('fail', 0)}"
+            ),
+            f"- Pass rate: {_fmt_pct(citations.get('pass_rate'))}",
+            f"- 14d pass trend: {_fmt_trend(citations.get('trend_14d', []), 'pass')}",
+            "",
+            "## Illustration Provider",
+            "",
+            (
+                f"- Monthly cost: ${illustration.get('monthly_cost_usd', 0):.4f} / "
+                f"${illustration.get('budget_cap_usd', 0):.2f} cap"
+            ),
+            f"- Budget utilization: {_fmt_pct(illustration.get('budget_utilization'))}",
+            f"- Provider distribution: {illustration.get('provider_distribution', {}) or {}}",
+            f"- Monthly cost by provider: {illustration.get('monthly_cost_by_provider', {}) or {}}",
+            "",
+            "## Reach",
+            "",
+            f"- Published articles: {reach['published_articles']}",
+            f"- Newsletter recipients: {reach['newsletter_recipients']}",
+            f"- Ghost analytics available: {reach['available']['ghost']}",
+            "",
+            "## Operations",
+            "",
+            f"- Publish runs: {operations['publish_runs']}",
+            f"- Publish failures: {operations['publish_failures']}",
+            "",
+            "## Per Article",
+            "",
+            "| Article | Cost (USD) | AI Time | Editor Time | Ratio | Publish |",
+            "| --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
 
     for item in metrics.get("per_article", []):
         lines.append(

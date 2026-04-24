@@ -1,0 +1,13 @@
+{
+  "article_id": "art-pass",
+  "claims": [
+    {
+      "claim_idx": 0,
+      "text": "Alpha claim",
+      "citations": [
+        { "source_id": "src-alpha", "url": "https://example.com/a" },
+        { "source_id": "src-beta", "url": "https://example.com/b" }
+      ]
+    }
+  ]
+}

@@ -29,8 +29,13 @@ MODEL_PRICING_PER_MILLION = {
     "sonnet": {"input": 3.0, "output": 15.0},
     "opus": {"input": 15.0, "output": 75.0},
 }
+OPUS_CACHE_RATES_PER_MILLION = {
+    "base_input": 15.0,
+    "cache_read_input": 1.5,
+}
 AI_LOG_PREFIXES = {"brief", "draft", "factcheck", "channel", "rewrite"}
 QUALITY_LOG_PREFIXES = {"lint", "standards", "factcheck"}
+LINT_CITATIONS_CHECK_ID = "citations-cross-check"
 
 
 def _parse_iso8601(value: str | None) -> datetime | None:
@@ -97,6 +102,24 @@ def _safe_read_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _safe_read_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                rows.append(payload)
+    except OSError:
+        return []
+    return rows
+
+
 def _list_recent_log_files(since: datetime) -> list[Path]:
     if not LOGS_DIR.exists():
         return []
@@ -110,6 +133,14 @@ def _list_recent_log_files(since: datetime) -> list[Path]:
         if modified >= since:
             paths.append(path)
     return sorted(paths)
+
+
+def _zero_14d_buckets(now: datetime) -> list[dict[str, Any]]:
+    buckets: list[dict[str, Any]] = []
+    for offset in range(13, -1, -1):
+        day = (now - timedelta(days=offset)).date().isoformat()
+        buckets.append({"date": day, "pass": 0, "warn_missing": 0, "warn_mismatch": 0, "fail": 0, "total": 0})
+    return buckets
 
 
 @dataclass
@@ -414,6 +445,8 @@ def _load_log_records(
             if event_type == "lint":
                 if status:
                     record.lint_results.append(status == "pass")
+                elif payload.get("items"):
+                    record.lint_results.append(bool(payload.get("can_publish")))
             if event_type == "standards" and status:
                 record.standards_pass = status == "pass"
             if event_type == "factcheck" and status == "fail":
@@ -434,6 +467,157 @@ def _load_log_records(
         )
 
     return log_events
+
+
+def _collect_cache_metrics(log_events: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    factcheck_events = [event for event in log_events if event["type"] == "factcheck"]
+    creation_total = sum(int(event["payload"].get("cache_creation_input_tokens") or 0) for event in factcheck_events)
+    read_total = sum(int(event["payload"].get("cache_read_input_tokens") or 0) for event in factcheck_events)
+    cached_runs = [
+        event
+        for event in factcheck_events
+        if int(event["payload"].get("cache_creation_input_tokens") or 0) > 0
+        or int(event["payload"].get("cache_read_input_tokens") or 0) > 0
+        or bool(event["payload"].get("cache_enabled"))
+    ]
+    hit_denom = creation_total + read_total
+    hit_rate = round(read_total / hit_denom, 4) if hit_denom else 0.0
+    saved_per_million = OPUS_CACHE_RATES_PER_MILLION["base_input"] - OPUS_CACHE_RATES_PER_MILLION["cache_read_input"]
+    estimated_saved_usd = round((read_total / 1_000_000.0) * saved_per_million, 6)
+
+    buckets = _zero_14d_buckets(now)
+    bucket_map = {bucket["date"]: bucket for bucket in buckets}
+    for event in factcheck_events:
+        timestamp = event.get("timestamp")
+        if timestamp is None:
+            continue
+        day = timestamp.date().isoformat()
+        bucket = bucket_map.get(day)
+        if bucket is None:
+            continue
+        creation = int(event["payload"].get("cache_creation_input_tokens") or 0)
+        read = int(event["payload"].get("cache_read_input_tokens") or 0)
+        bucket["total"] += 1
+        bucket.setdefault("cache_creation_tokens", 0)
+        bucket.setdefault("cache_read_tokens", 0)
+        bucket["cache_creation_tokens"] += creation
+        bucket["cache_read_tokens"] += read
+    for bucket in buckets:
+        creation = int(bucket.pop("cache_creation_tokens", 0))
+        read = int(bucket.pop("cache_read_tokens", 0))
+        denom = creation + read
+        bucket["hit_rate"] = round(read / denom, 4) if denom else 0.0
+
+    other_pipelines = []
+    for event_type, label in (("brief", "brief_generator"), ("draft", "draft_writer"), ("lint", "editorial_lint")):
+        events = [event for event in log_events if event["type"] == event_type]
+        other_pipelines.append(
+            {
+                "pipeline": label,
+                "runs": len(events),
+                "cache_enabled_runs": sum(1 for event in events if bool(event["payload"].get("cache_enabled"))),
+            }
+        )
+
+    return {
+        "fact_checker": {
+            "runs": len(factcheck_events),
+            "runs_with_cache_enabled": len(cached_runs),
+            "total_cache_creation_tokens": creation_total,
+            "total_cache_read_tokens": read_total,
+            "cache_hit_rate": hit_rate,
+            "estimated_saved_usd": estimated_saved_usd,
+            "trend_14d": buckets,
+        },
+        "other_pipelines": other_pipelines,
+    }
+
+
+def _classify_citations_item(item: dict[str, Any]) -> str:
+    status = str(item.get("status") or "").lower()
+    message = str(item.get("message") or "").lower()
+    if status == "pass":
+        return "pass"
+    if status == "fail":
+        return "fail"
+    if "no citations data" in message:
+        return "warn_missing"
+    if "not backed" in message or "manual source_id" in message:
+        return "warn_mismatch"
+    return "warn_missing"
+
+
+def _collect_citations_metrics(log_events: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    lint_events = [event for event in log_events if event["type"] == "lint" and event["payload"].get("mode") == "article"]
+    relevant_items: list[tuple[datetime | None, str]] = []
+    for event in lint_events:
+        items = event["payload"].get("items") or []
+        citations_item = next((item for item in items if item.get("id") == LINT_CITATIONS_CHECK_ID), None)
+        if citations_item is None:
+            continue
+        relevant_items.append((event.get("timestamp"), _classify_citations_item(citations_item)))
+
+    counts = {"pass": 0, "warn_missing": 0, "warn_mismatch": 0, "fail": 0}
+    buckets = _zero_14d_buckets(now)
+    bucket_map = {bucket["date"]: bucket for bucket in buckets}
+    for timestamp, bucket_key in relevant_items:
+        counts[bucket_key] += 1
+        if timestamp is None:
+            continue
+        day = timestamp.date().isoformat()
+        bucket = bucket_map.get(day)
+        if bucket is None:
+            continue
+        bucket[bucket_key] += 1
+        bucket["total"] += 1
+
+    total = len(relevant_items)
+    pass_rate = round(counts["pass"] / total, 4) if total else None
+    return {
+        "article_runs_with_citations_check": total,
+        "pass": counts["pass"],
+        "warn_missing": counts["warn_missing"],
+        "warn_mismatch": counts["warn_mismatch"],
+        "fail": counts["fail"],
+        "pass_rate": pass_rate,
+        "trend_14d": buckets,
+    }
+
+
+def _collect_illustration_metrics(since: datetime) -> dict[str, Any]:
+    log_path = LOGS_DIR / "illustrations.jsonl"
+    rows = _safe_read_jsonl(log_path)
+    provider_distribution: dict[str, int] = defaultdict(int)
+    monthly_cost_by_provider: dict[str, float] = defaultdict(float)
+    monthly_cost_usd = 0.0
+
+    for row in rows:
+        timestamp = _parse_iso8601(str(row.get("timestamp") or ""))
+        if timestamp is not None and timestamp < since:
+            continue
+        provider = str(row.get("provider") or row.get("source") or "unknown")
+        provider_distribution[provider] += 1
+        cost = row.get("cost_estimate")
+        if cost is None:
+            continue
+        try:
+            cost_value = float(cost)
+        except (TypeError, ValueError):
+            continue
+        monthly_cost_usd += cost_value
+        monthly_cost_by_provider[provider] += cost_value
+
+    budget_cap_usd = float(os.getenv("CLAUDE_MAGAZINE_ILLUSTRATION_MONTHLY_USD_CAP", "5") or 5.0)
+    utilization = round(monthly_cost_usd / budget_cap_usd, 4) if budget_cap_usd > 0 else None
+    return {
+        "provider_distribution": dict(sorted(provider_distribution.items())),
+        "monthly_cost_usd": round(monthly_cost_usd, 6),
+        "monthly_cost_by_provider": {
+            provider: round(cost, 6) for provider, cost in sorted(monthly_cost_by_provider.items())
+        },
+        "budget_cap_usd": round(budget_cap_usd, 2),
+        "budget_utilization": utilization,
+    }
 
 
 def _operations_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -527,6 +711,9 @@ def collect_metrics(
     reach_external = _ghost_reach_metrics()
     langfuse_metrics = _langfuse_metrics()
     operations = _operations_summary(log_events)
+    cache_metrics = _collect_cache_metrics(log_events, now)
+    citations_metrics = _collect_citations_metrics(log_events, now)
+    illustration_metrics = _collect_illustration_metrics(since)
 
     return {
         "generated_at": now.isoformat(),
@@ -594,5 +781,8 @@ def collect_metrics(
             "ghost": reach_external,
         },
         "operations": operations,
+        "cache": cache_metrics,
+        "citations": citations_metrics,
+        "illustration": illustration_metrics,
         "per_article": finalized,
     }

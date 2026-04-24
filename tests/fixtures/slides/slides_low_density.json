@@ -1,0 +1,25 @@
+{
+  "slides": [
+    {
+      "idx": 1,
+      "role": "hook",
+      "main_copy": "Hook",
+      "sub_copy": "Short",
+      "highlight": "A"
+    },
+    {
+      "idx": 2,
+      "role": "body",
+      "main_copy": "cost, speed, launch",
+      "sub_copy": "",
+      "highlight": ""
+    },
+    {
+      "idx": 3,
+      "role": "cta",
+      "main_copy": "Read",
+      "sub_copy": "More",
+      "highlight": "CTA"
+    }
+  ]
+}

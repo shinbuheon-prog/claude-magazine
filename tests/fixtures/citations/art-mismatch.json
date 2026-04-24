@@ -1,0 +1,12 @@
+{
+  "article_id": "art-mismatch",
+  "claims": [
+    {
+      "claim_idx": 0,
+      "text": "Alpha claim",
+      "citations": [
+        { "source_id": "src-alpha", "url": "https://example.com/a" }
+      ]
+    }
+  ]
+}

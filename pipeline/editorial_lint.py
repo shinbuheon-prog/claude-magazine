@@ -24,7 +24,11 @@ from typing import Any
 from dotenv import load_dotenv
 
 # Windows UTF-8 래핑 가드 — 다중 모듈 import 시 재래핑하면 closed file 에러 발생.
-if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
+if (
+    sys.platform == "win32"
+    and "pytest" not in sys.modules
+    and not getattr(sys.stdout, "_utf8_wrapped", False)
+):
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -819,7 +823,7 @@ def lint_draft(
     if text_override is not None:
         text = text_override
     else:
-        text = Path(draft_path).read_text(encoding="utf-8")
+        text = Path(draft_path).read_text(encoding="utf-8-sig")
 
     selected = only if only else CHECK_IDS
     items: list[dict[str, Any]] = []
@@ -863,6 +867,51 @@ def lint_draft(
         "items": items,
         "can_publish": can_publish,
     }
+
+
+def _derive_lint_article_id(
+    draft_path: str | None,
+    article_id: str | None,
+    ghost_post_id: str | None,
+) -> str | None:
+    if article_id:
+        return article_id
+    if draft_path:
+        return Path(draft_path).stem
+    if ghost_post_id:
+        return ghost_post_id
+    return None
+
+
+def _write_lint_log(
+    *,
+    mode: str,
+    result: dict[str, Any],
+    draft_path: str | None = None,
+    article_id: str | None = None,
+    ghost_post_id: str | None = None,
+    only: list[str] | None = None,
+    slides_json: str | None = None,
+    source_path: str | None = None,
+) -> Path:
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "mode": mode,
+        "article_id": _derive_lint_article_id(draft_path, article_id, ghost_post_id),
+        "draft_path": draft_path,
+        "ghost_post_id": ghost_post_id,
+        "slides_json": slides_json,
+        "source_path": source_path,
+        "selected_checks": only or (CHECK_IDS if mode == "article" else CARD_NEWS_CHECK_IDS),
+        "passed": result["passed"],
+        "failed": result["failed"],
+        "warnings": result["warnings"],
+        "can_publish": result["can_publish"],
+        "items": result["items"],
+    }
+    log_file = LOGS_DIR / f"lint_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    log_file.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")
+    return log_file
 
 
 # ---------------------------------------------------------------------------
@@ -1186,6 +1235,17 @@ def main() -> int:
             category=args.category,
         )
 
+    log_file = _write_lint_log(
+        mode=args.mode,
+        result=result,
+        draft_path=draft_path,
+        article_id=args.article_id,
+        ghost_post_id=args.ghost_post_id,
+        only=args.only,
+        slides_json=args.slides_json,
+        source_path=args.source,
+    )
+
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -1205,6 +1265,7 @@ def main() -> int:
             print("발행 가능" if result["can_publish"] else "발행 불가 — 카드뉴스 밀도 게이트 미통과")
         else:
             print(format_report(result, draft_path=draft_path, ghost_post_id=args.ghost_post_id))
+        print(f"[log] -> {log_file.name}", file=sys.stderr)
 
     if args.strict and result["failed"] > 0:
         return 1
