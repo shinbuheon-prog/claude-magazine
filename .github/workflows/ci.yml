@@ -60,25 +60,14 @@ jobs:
           cache: pip
       - name: Install test dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-      - name: Show env
-        run: |
-          python --version
-          pip list | grep -E "pytest|coverage|anthropic" || true
-      - name: Pytest with coverage (verbose)
-        shell: bash
-        run: |
-          set -o pipefail
-          pytest -v --tb=long --cov=pipeline.editorial_lint --cov=pipeline.citations_store --cov-report=xml:coverage.xml tests/ 2>&1 | tee /tmp/pytest.log
+      - name: Pytest with coverage
+        run: pytest --cov=pipeline.editorial_lint --cov=pipeline.citations_store --cov-report=xml:coverage.xml tests/
       - name: Upload coverage artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pytest-coverage
-          path: |
-            coverage.xml
-            /tmp/pytest.log
+          path: coverage.xml
           retention-days: 3
-          if-no-files-found: warn
 
   web-build:
     runs-on: ubuntu-latest

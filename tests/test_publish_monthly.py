@@ -62,6 +62,15 @@ def test_publish_monthly_from_stage_skips_earlier_stages(tmp_path: Path, monkeyp
         encoding="utf-8",
     )
 
+    # stage_pdf_compile은 scripts/compile_monthly_pdf.py를 subprocess로 호출하는데,
+    # subprocess는 monkeypatched ISSUES_DIR를 상속받지 못하고 실제 repo 경로를 참조.
+    # CI fresh checkout에는 drafts/issues/가 없으므로(gitignore) subprocess가 실패.
+    # 테스트 목적(--from-stage가 앞 stage skip)만 검증하기 위해 subprocess 호출을 mock.
+    class _MockCompleted:
+        returncode = 0
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *a, **kw: _MockCompleted())
+
     monkeypatch.setattr(sys, "argv", ["publish_monthly.py", "--month", "2026-05", "--from-stage", "pdf_compile", "--dry-run", "--yes"])
     assert module.main() == 0
     state = json.loads(module._state_path("2026-05").read_text(encoding="utf-8"))
