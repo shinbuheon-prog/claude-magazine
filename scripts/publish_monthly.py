@@ -27,6 +27,14 @@ if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
         except Exception:
             pass
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+ISSUES_DIR = ROOT / "drafts" / "issues"
+REPORTS_DIR = ROOT / "reports"
+LOGS_DIR = ROOT / "logs"
+
 try:
     import yaml  # type: ignore
 except ImportError:
@@ -37,11 +45,6 @@ try:
     from pipeline.failure_playbook import generate_failure_report
 except ModuleNotFoundError:
     from failure_playbook import generate_failure_report  # type: ignore
-
-ROOT = Path(__file__).resolve().parent.parent
-ISSUES_DIR = ROOT / "drafts" / "issues"
-REPORTS_DIR = ROOT / "reports"
-LOGS_DIR = ROOT / "logs"
 
 STAGE_ORDER = [
     "plan_loaded",
