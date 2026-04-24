@@ -633,6 +633,30 @@ def _operations_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
         if str(event["payload"].get("status") or "").lower() == "failed"
     )
 
+    publish_monthly = {
+        "last_month": None,
+        "stages_duration_sec": {},
+        "stages_cost_usd": {},
+    }
+    state_files = sorted((ROOT / "reports").glob("publish_state_*.json"))
+    if state_files:
+        latest = state_files[-1]
+        payload = _safe_read_json(latest) or {}
+        telemetry = payload.get("telemetry") or {}
+        publish_monthly = {
+            "last_month": payload.get("month"),
+            "stages_duration_sec": {
+                key: value.get("duration_sec")
+                for key, value in telemetry.items()
+                if isinstance(value, dict)
+            },
+            "stages_cost_usd": {
+                key: value.get("cost_usd")
+                for key, value in telemetry.items()
+                if isinstance(value, dict)
+            },
+        }
+
     return {
         "publish_runs": len(publish_events),
         "publish_successes": publish_successes,
@@ -641,6 +665,7 @@ def _operations_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
         "alert_failures": 0,
         "asset_upload_failures": 0,
         "sns_publish_failures": 0,
+        "publish_monthly": publish_monthly,
         "available": {
             "publish_logs": True,
             "n8n": False,

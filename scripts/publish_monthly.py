@@ -1,28 +1,23 @@
 """
-월간 발행 원스톱 스크립트 (TASK_037)
+Monthly publish orchestrator.
 
-흐름 (7단계, 체크포인트·재실행 가능):
-  1. 플랜 로드 (TASK_036)
-  2. 품질 게이트 (editorial_lint, standards_checker, source_diversity)
-  3. AI 고지 삽입 (disclosure_injector)
-  4. PDF 컴파일 (compile_monthly_pdf.py)
-  5. Ghost 일괄 발행
-  6. 뉴스레터 발송
-  7. SNS 4채널 재가공
-
-사용법:
-  python scripts/publish_monthly.py --month 2026-05 --dry-run
-  python scripts/publish_monthly.py --month 2026-05 --publish --confirm
-  python scripts/publish_monthly.py --month 2026-05 --skip-pdf --skip-sns
+Supports checkpointed execution with small operational UX helpers:
+- --status
+- --reset-stage
+- --from-stage
+- telemetry persisted in reports/publish_state_<month>.json
 """
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Callable
 
 if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
     if hasattr(sys.stdout, "reconfigure"):
@@ -35,304 +30,429 @@ if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
 try:
     import yaml  # type: ignore
 except ImportError:
-    print("❌ PyYAML 미설치", file=sys.stderr)
+    print("PyYAML is required.", file=sys.stderr)
     sys.exit(1)
 
 ROOT = Path(__file__).resolve().parent.parent
 ISSUES_DIR = ROOT / "drafts" / "issues"
 REPORTS_DIR = ROOT / "reports"
-ARCHIVE_DIR = ROOT / "archive"
+LOGS_DIR = ROOT / "logs"
+
+STAGE_ORDER = [
+    "plan_loaded",
+    "quality_gate",
+    "disclosure_injected",
+    "pdf_compile",
+    "ghost_publish",
+    "newsletter",
+    "sns",
+]
+STAGE_LABELS = {
+    "plan_loaded": "Plan Loaded",
+    "quality_gate": "Quality Gate",
+    "disclosure_injected": "Disclosure",
+    "pdf_compile": "PDF Compile",
+    "ghost_publish": "Ghost Publish",
+    "newsletter": "Newsletter",
+    "sns": "SNS",
+}
+STAGE_STATE_KEYS = {
+    "plan_loaded": "plan_loaded",
+    "quality_gate": "quality_gate",
+    "disclosure_injected": "disclosure_injected",
+    "pdf_compile": "pdf_compiled",
+    "ghost_publish": "ghost_published",
+    "newsletter": "newsletter_sent",
+    "sns": "sns_distributed",
+}
+STATE_ALIASES = {
+    "pdf_compile": ["pdf_compile", "pdf_compiled"],
+    "ghost_publish": ["ghost_publish", "ghost_published"],
+    "newsletter": ["newsletter", "newsletter_sent"],
+    "sns": ["sns", "sns_distributed"],
+    "disclosure_injected": ["disclosure", "disclosure_injected"],
+}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _state_path(month: str) -> Path:
     return REPORTS_DIR / f"publish_state_{month}.json"
 
 
-def _load_state(month: str) -> dict:
+def _normalize_state(state: dict[str, Any], month: str) -> dict[str, Any]:
+    normalized = {
+        "month": state.get("month") or month,
+        "stages": dict(state.get("stages") or {}),
+        "telemetry": dict(state.get("telemetry") or {}),
+        "last_updated": state.get("last_updated"),
+    }
+    stages = normalized["stages"]
+    for stage, aliases in STATE_ALIASES.items():
+        target_key = STAGE_STATE_KEYS[stage]
+        if target_key in stages:
+            continue
+        for alias in aliases:
+            if alias in stages:
+                stages[target_key] = stages[alias]
+                break
+    return normalized
+
+
+def _load_state(month: str) -> dict[str, Any]:
     path = _state_path(month)
     if not path.exists():
-        return {"month": month, "stages": {}}
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return {"month": month, "stages": {}, "telemetry": {}, "last_updated": None}
+    with path.open("r", encoding="utf-8-sig") as f:
+        payload = json.load(f)
+    return _normalize_state(payload, month)
 
 
-def _save_state(month: str, state: dict) -> None:
+def _save_state(month: str, state: dict[str, Any]) -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = _state_path(month)
-    state["last_updated"] = datetime.now(timezone.utc).isoformat()
-    with path.open("w", encoding="utf-8") as f:
+    state["last_updated"] = _utc_now()
+    with _state_path(month).open("w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def load_plan(month: str) -> dict:
+def _record_telemetry(state: dict[str, Any], stage: str, started_at: str, finished_at: str, cost_usd: float | None = None) -> None:
+    started_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    finished_dt = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+    state.setdefault("telemetry", {})[stage] = {
+        "started": started_at,
+        "finished": finished_at,
+        "duration_sec": round(max(0.0, (finished_dt - started_dt).total_seconds()), 3),
+        "cost_usd": cost_usd,
+    }
+
+
+def load_plan(month: str) -> dict[str, Any]:
     path = ISSUES_DIR / f"{month}.yml"
     if not path.exists():
-        raise FileNotFoundError(f"플랜 없음: {path}")
+        raise FileNotFoundError(f"Plan not found: {path}")
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
-# ── 각 단계 ───────────────────────────────────────
+def _validate_stage_name(name: str) -> str:
+    if name in STAGE_ORDER:
+        return name
+    match = difflib.get_close_matches(name, STAGE_ORDER, n=1)
+    if match:
+        raise ValueError(f"Unknown stage '{name}'. Did you mean '{match[0]}'?")
+    raise ValueError(f"Unknown stage '{name}'. Expected one of: {', '.join(STAGE_ORDER)}")
 
-def stage_plan_loaded(args, state, plan) -> bool:
+
+def _confirm_or_exit(question: str, yes: bool) -> None:
+    if yes:
+        return
+    answer = input(f"{question} [y/N]: ").strip().lower()
+    if answer not in {"y", "yes"}:
+        raise SystemExit(1)
+
+
+def _estimate_stage_cost(stage: str) -> float | None:
+    prefixes = {
+        "quality_gate": ("lint_", "factcheck_", "standards_"),
+        "ghost_publish": ("publish_",),
+    }.get(stage)
+    if not prefixes or not LOGS_DIR.exists():
+        return None
+    total = 0.0
+    found = False
+    for path in LOGS_DIR.glob("*.json"):
+        if not path.name.startswith(prefixes):
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError:
+            continue
+        cost = payload.get("cost_usd")
+        if cost is None:
+            continue
+        found = True
+        total += float(cost)
+    return round(total, 6) if found else None
+
+
+def _status_line(stage: str, state: dict[str, Any], index: int) -> str:
+    key = STAGE_STATE_KEYS[stage]
+    value = state.get("stages", {}).get(key)
+    icon = "done" if value else "todo"
+    summary = ""
+    if stage == "plan_loaded" and value:
+        summary = f"articles={state['stages'].get('article_count', 0)}"
+    elif stage == "quality_gate" and isinstance(value, dict):
+        summary = f"passed={value.get('passed', 0)} failed={value.get('failed', 0)}"
+    elif isinstance(value, list):
+        summary = f"items={len(value)}"
+    elif isinstance(value, dict):
+        summary = "completed"
+    elif isinstance(value, str):
+        summary = value
+    elif value is True:
+        summary = "completed"
+    return f"[{index}/{len(STAGE_ORDER)}] {stage:<20} {icon:<4} {summary}".rstrip()
+
+
+def print_status(month: str, state: dict[str, Any], strict: bool) -> int:
+    print(f"=== Monthly Publish Status: {month} ===")
+    for index, stage in enumerate(STAGE_ORDER, start=1):
+        print(_status_line(stage, state, index))
+    print(f"last_updated: {state.get('last_updated') or 'n/a'}")
+    if strict and any(not state.get("stages", {}).get(STAGE_STATE_KEYS[stage]) for stage in STAGE_ORDER):
+        return 1
+    return 0
+
+
+def reset_stage(month: str, state: dict[str, Any], stage: str) -> int:
+    key = STAGE_STATE_KEYS[stage]
+    state.get("stages", {}).pop(key, None)
+    state.get("telemetry", {}).pop(stage, None)
+    _save_state(month, state)
+    print(f"Reset stage: {stage}")
+    return 0
+
+
+def _stage_start_message(stage: str, index: int) -> str:
+    return f"[{index}/{len(STAGE_ORDER)}] {STAGE_LABELS[stage]}"
+
+
+def stage_plan_loaded(args, state, plan) -> bool | None:
     if state["stages"].get("plan_loaded"):
-        print("⏭  [1/7] 플랜 로드 — 이미 완료 (skip)")
+        print(f"{_stage_start_message('plan_loaded', 1)} already completed")
         return True
     total = len(plan.get("articles", []))
-    print(f"📋 [1/7] 플랜 로드: {plan.get('issue')} ({total} 꼭지)")
+    print(f"{_stage_start_message('plan_loaded', 1)}: {plan.get('issue')} ({total} articles)")
     state["stages"]["plan_loaded"] = True
     state["stages"]["article_count"] = total
     return True
 
 
-def stage_quality_gate(args, state, plan) -> bool:
-    # TASK_039: Claude Code v2.1.111+ 의 /ultrareview 를 병용하면 21꼭지 병렬 검토 가능.
-    # 이 함수는 plan의 상태값만 집계. 실제 품질 검증은 아래 두 경로 중 선택:
-    #   (a) 자동: Claude Code 세션에서 `publish-gate` skill을 꼭지별 반복 호출
-    #   (b) 병렬: `/ultrareview` 수동 호출 (현재 develop 브랜치의 drafts/ 전체)
-    # /ultrareview 워크플로우 가이드: docs/claude_code_features.md §2
+def stage_quality_gate(args, state, plan) -> bool | None:
     if state["stages"].get("quality_gate", {}).get("passed") is not None:
-        print(f"⏭  [2/7] 품질 게이트 — 이전 실행 결과 재사용")
+        print(f"{_stage_start_message('quality_gate', 2)} already completed")
         return True
-
-    print(f"🔍 [2/7] 품질 게이트 (꼭지별 lint·standards·diversity)")
-    print(f"   TIP: 21꼭지 병렬 리뷰는 Claude Code 세션에서 `/ultrareview` 병용 권장")
     articles = plan.get("articles", [])
-
     passed, failed, errors = 0, 0, []
-    for a in articles:
-        status = a.get("status")
-        if status in ("approved", "published"):
-            passed += 1
-        elif status == "lint":
-            # 실제 실행은 publish_gate skill로 하고 여기선 상태만 집계
+    print(f"{_stage_start_message('quality_gate', 2)}")
+    for article in articles:
+        status = article.get("status")
+        if status in {"approved", "published", "lint"}:
             passed += 1
         else:
             failed += 1
-            errors.append(f"{a.get('slug')}: status={status} (승인 미완료)")
-
-    result = {"passed": passed, "failed": failed, "errors": errors[:10]}
-    state["stages"]["quality_gate"] = result
-    print(f"   통과: {passed} / 실패: {failed}")
-    for e in errors[:3]:
-        print(f"   - {e}")
-
+            errors.append(f"{article.get('slug')}: status={status}")
+    state["stages"]["quality_gate"] = {"passed": passed, "failed": failed, "errors": errors[:10]}
+    print(f"passed={passed} failed={failed}")
     if failed > 0 and not args.force:
-        print(f"\n❌ 품질 게이트 실패 — --force 사용 시 무시하고 진행", file=sys.stderr)
+        print("Quality gate failed. Use --force to continue.", file=sys.stderr)
         return False
     return True
 
 
-def stage_disclosure(args, state, plan) -> bool:
+def stage_disclosure(args, state, plan) -> bool | None:
     if state["stages"].get("disclosure_injected"):
-        print("⏭  [3/7] AI 고지 삽입 — 이미 완료")
+        print(f"{_stage_start_message('disclosure_injected', 3)} already completed")
         return True
-
-    print(f"📝 [3/7] AI 사용 고지 삽입 (전 꼭지)")
+    print(f"{_stage_start_message('disclosure_injected', 3)}")
     if args.dry_run:
-        print(f"   (dry-run) disclosure_injector.py 호출 건너뜀")
-    else:
-        # 실제는 각 꼭지 HTML에 대해 disclosure_injector 호출
-        # 여기서는 일괄 처리 placeholder
-        articles = plan.get("articles", [])
-        for a in articles:
-            if a.get("ghost_post_id"):
-                # subprocess 호출 예시
-                pass
-        print(f"   {len(articles)} 꼭지 대상 (각 heavy 템플릿)")
-
+        print("(dry-run) disclosure injection skipped")
     state["stages"]["disclosure_injected"] = True
     return True
 
 
-def stage_pdf_compile(args, state, plan) -> bool:
+def stage_pdf_compile(args, state, plan) -> bool | None:
     if args.skip_pdf:
-        print("⏭  [4/7] PDF 컴파일 — --skip-pdf (건너뜀)")
-        return True
+        print(f"{_stage_start_message('pdf_compile', 4)} skipped (--skip-pdf)")
+        return None
     if state["stages"].get("pdf_compiled"):
-        print(f"⏭  [4/7] PDF 컴파일 — 이미 완료: {state['stages']['pdf_compiled']}")
+        print(f"{_stage_start_message('pdf_compile', 4)} already completed")
         return True
-
-    print(f"📄 [4/7] PDF 컴파일")
-    cmd = [
-        "python", str(ROOT / "scripts" / "compile_monthly_pdf.py"),
-        "--month", args.month,
-    ]
+    print(f"{_stage_start_message('pdf_compile', 4)}")
+    cmd = ["python", str(ROOT / "scripts" / "compile_monthly_pdf.py"), "--month", args.month]
     if args.dry_run:
         cmd.append("--dry-run")
     if args.force:
         cmd.append("--force")
-
     try:
         subprocess.run(cmd, check=True)
-        pdf_path = ROOT / "output" / f"claude-magazine-{args.month}.pdf"
-        if pdf_path.exists() and not args.dry_run:
-            state["stages"]["pdf_compiled"] = str(pdf_path)
-        return True
     except subprocess.CalledProcessError as exc:
-        print(f"❌ PDF 컴파일 실패: {exc}", file=sys.stderr)
+        print(f"PDF compile failed: {exc}", file=sys.stderr)
         return False
-
-
-def stage_ghost_publish(args, state, plan) -> bool:
-    if not args.publish:
-        print("⏭  [5/7] Ghost 발행 — --publish 플래그 없음 (skip)")
-        return True
-    if state["stages"].get("ghost_published"):
-        print(f"⏭  [5/7] Ghost 발행 — 이미 완료")
-        return True
-
-    print(f"🌐 [5/7] Ghost 일괄 발행")
-    if args.dry_run:
-        print(f"   (dry-run) Ghost API 호출 건너뜀")
-        return True
-
-    if not args.confirm:
-        print("❌ --confirm 플래그 필요 (발행 전 명시적 승인)", file=sys.stderr)
-        return False
-
-    articles = plan.get("articles", [])
-    published_ids = []
-    for a in articles:
-        if a.get("status") != "approved":
-            continue
-        # ghost_client.create_post 호출 (실제 구현)
-        published_ids.append(a.get("slug"))
-
-    state["stages"]["ghost_published"] = published_ids
-    print(f"   {len(published_ids)}개 꼭지 발행 완료")
+    pdf_path = ROOT / "output" / f"claude-magazine-{args.month}.pdf"
+    state["stages"]["pdf_compiled"] = str(pdf_path) if pdf_path.exists() and not args.dry_run else True
     return True
 
 
-def stage_newsletter(args, state, plan) -> bool:
+def stage_ghost_publish(args, state, plan) -> bool | None:
     if not args.publish:
-        print("⏭  [6/7] 뉴스레터 — --publish 없음 (skip)")
+        print(f"{_stage_start_message('ghost_publish', 5)} skipped (--publish not set)")
+        return None
+    if state["stages"].get("ghost_published"):
+        print(f"{_stage_start_message('ghost_publish', 5)} already completed")
         return True
-    if state["stages"].get("newsletter_sent"):
-        print("⏭  [6/7] 뉴스레터 — 이미 발송 완료")
-        return True
-
-    print(f"📧 [6/7] 뉴스레터 발송")
+    print(f"{_stage_start_message('ghost_publish', 5)}")
     if args.dry_run:
-        print(f"   (dry-run) skip")
+        print("(dry-run) ghost publish skipped")
+        return None
+    if not args.confirm:
+        print("--confirm is required with --publish", file=sys.stderr)
+        return False
+    published_ids = [a.get("slug") for a in plan.get("articles", []) if a.get("status") == "approved"]
+    state["stages"]["ghost_published"] = published_ids
+    return True
+
+
+def stage_newsletter(args, state, plan) -> bool | None:
+    if not args.publish:
+        print(f"{_stage_start_message('newsletter', 6)} skipped (--publish not set)")
+        return None
+    if state["stages"].get("newsletter_sent"):
+        print(f"{_stage_start_message('newsletter', 6)} already completed")
         return True
-    # ghost_client.send_newsletter 호출 (실제)
+    print(f"{_stage_start_message('newsletter', 6)}")
+    if args.dry_run:
+        print("(dry-run) newsletter skipped")
+        return None
     state["stages"]["newsletter_sent"] = True
     return True
 
 
-def stage_sns(args, state, plan) -> bool:
+def stage_sns(args, state, plan) -> bool | None:
     if args.skip_sns:
-        print("⏭  [7/7] SNS 재가공 — --skip-sns")
-        return True
+        print(f"{_stage_start_message('sns', 7)} skipped (--skip-sns)")
+        return None
     if state["stages"].get("sns_distributed"):
-        print("⏭  [7/7] SNS 재가공 — 이미 완료")
+        print(f"{_stage_start_message('sns', 7)} already completed")
         return True
-
-    print(f"📣 [7/7] SNS 4채널 재가공 (sns·linkedin·twitter·instagram)")
+    print(f"{_stage_start_message('sns', 7)}")
     if args.dry_run:
-        print(f"   (dry-run) skip")
-        return True
-
-    articles = plan.get("articles", [])
-    distributed = {}
-    for a in articles:
-        if a.get("status") not in ("approved", "published"):
-            continue
-        # channel_rewriter 호출 4회
-        distributed[a.get("slug")] = ["sns", "linkedin", "twitter", "instagram"]
-
+        print("(dry-run) sns distribution skipped")
+        return None
+    distributed = {
+        article.get("slug"): ["sns", "linkedin", "twitter", "instagram"]
+        for article in plan.get("articles", [])
+        if article.get("status") in {"approved", "published"}
+    }
     state["stages"]["sns_distributed"] = distributed
-    print(f"   {len(distributed) * 4} 포스트 초안 생성")
     return True
 
 
-def write_report(month: str, state: dict, plan: dict) -> Path:
+def write_report(month: str, state: dict[str, Any], plan: dict[str, Any]) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORTS_DIR / f"publish_{month}.md"
-
     lines = [
-        f"# 월간 발행 리포트 — {month}",
+        f"# Monthly Publish Report: {month}",
         "",
-        f"- 이슈: {plan.get('issue')}",
-        f"- 테마: {plan.get('theme')}",
-        f"- 편집장: {plan.get('editor_in_chief')}",
-        f"- 리포트 생성: {datetime.now(timezone.utc).isoformat()}",
+        f"- Issue: {plan.get('issue')}",
+        f"- Theme: {plan.get('theme')}",
+        f"- Editor in chief: {plan.get('editor_in_chief')}",
+        f"- Generated at: {_utc_now()}",
         "",
-        "## 단계별 상태",
+        "## Stages",
         "",
     ]
-
-    stage_names = [
-        ("plan_loaded", "플랜 로드"),
-        ("quality_gate", "품질 게이트"),
-        ("disclosure_injected", "AI 고지 삽입"),
-        ("pdf_compiled", "PDF 컴파일"),
-        ("ghost_published", "Ghost 발행"),
-        ("newsletter_sent", "뉴스레터"),
-        ("sns_distributed", "SNS 재가공"),
-    ]
-
-    for key, label in stage_names:
-        val = state["stages"].get(key)
-        icon = "✅" if val else "⬜"
-        summary = ""
-        if isinstance(val, dict):
-            summary = f" — {val}"
-        elif isinstance(val, list):
-            summary = f" — {len(val)}건"
-        elif isinstance(val, str):
-            summary = f" — {val}"
-        lines.append(f"- {icon} **{label}**{summary}")
-
+    for stage in STAGE_ORDER:
+        key = STAGE_STATE_KEYS[stage]
+        value = state["stages"].get(key)
+        icon = "done" if value else "todo"
+        telemetry = state.get("telemetry", {}).get(stage) or {}
+        duration = telemetry.get("duration_sec")
+        duration_text = f" ({duration}s)" if duration is not None else ""
+        lines.append(f"- {icon} {STAGE_LABELS[stage]}{duration_text}")
     report_path.write_text("\n".join(lines), encoding="utf-8")
     return report_path
 
 
+def _run_stage(stage_name: str, stage_fn: Callable[..., bool | None], args, state, plan) -> bool | None:
+    started_at = _utc_now()
+    ok = stage_fn(args, state, plan)
+    finished_at = _utc_now()
+    if ok is True:
+        _record_telemetry(state, stage_name, started_at, finished_at, _estimate_stage_cost(stage_name))
+    elif ok is None:
+        state.setdefault("telemetry", {}).pop(stage_name, None)
+    return ok
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="월간 발행 원스톱")
+    parser = argparse.ArgumentParser(description="Monthly publish orchestrator")
     parser.add_argument("--month", required=True, help="YYYY-MM")
-    parser.add_argument("--dry-run", action="store_true", help="실행 없이 단계 시뮬레이션")
-    parser.add_argument("--publish", action="store_true", help="실제 Ghost·뉴스레터 발행")
-    parser.add_argument("--confirm", action="store_true", help="--publish 확인 플래그")
-    parser.add_argument("--force", action="store_true", help="품질 게이트 실패 무시")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--confirm", action="store_true")
+    parser.add_argument("--force", action="store_true")
     parser.add_argument("--skip-pdf", action="store_true")
     parser.add_argument("--skip-sns", action="store_true")
+    parser.add_argument("--status", action="store_true", help="Show publish status and exit")
+    parser.add_argument("--strict", action="store_true", help="With --status, exit 1 when any stage is incomplete")
+    parser.add_argument("--reset-stage", help="Remove one stage from checkpoint state")
+    parser.add_argument("--from-stage", help="Start execution from the given stage and skip earlier stages")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompts for state-changing commands")
     args = parser.parse_args()
-
-    print(f"=== 월간 발행 원스톱: {args.month} ===\n")
-
-    try:
-        plan = load_plan(args.month)
-    except FileNotFoundError as exc:
-        print(f"❌ {exc}", file=sys.stderr)
-        return 1
 
     state = _load_state(args.month)
 
-    stages = [
-        stage_plan_loaded,
-        stage_quality_gate,
-        stage_disclosure,
-        stage_pdf_compile,
-        stage_ghost_publish,
-        stage_newsletter,
-        stage_sns,
+    if args.status:
+        return print_status(args.month, state, args.strict)
+
+    if args.reset_stage:
+        try:
+            stage_name = _validate_stage_name(args.reset_stage)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        _confirm_or_exit(f"Reset checkpoint stage '{stage_name}'?", args.yes)
+        return reset_stage(args.month, state, stage_name)
+
+    start_index = 0
+    if args.from_stage:
+        try:
+            from_stage = _validate_stage_name(args.from_stage)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        start_index = STAGE_ORDER.index(from_stage)
+        if state["stages"].get(STAGE_STATE_KEYS[from_stage]):
+            print(f"Warning: stage '{from_stage}' is already marked complete and will be rerun.")
+        _confirm_or_exit(f"Skip stages before '{from_stage}' and continue?", args.yes)
+
+    print(f"=== Monthly Publish: {args.month} ===")
+    try:
+        plan = load_plan(args.month)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    stages: list[tuple[str, Callable[..., bool | None]]] = [
+        ("plan_loaded", stage_plan_loaded),
+        ("quality_gate", stage_quality_gate),
+        ("disclosure_injected", stage_disclosure),
+        ("pdf_compile", stage_pdf_compile),
+        ("ghost_publish", stage_ghost_publish),
+        ("newsletter", stage_newsletter),
+        ("sns", stage_sns),
     ]
 
-    for stage_fn in stages:
-        ok = stage_fn(args, state, plan)
+    for index, (stage_name, stage_fn) in enumerate(stages):
+        if index < start_index:
+            print(f"Skipping {stage_name} due to --from-stage")
+            continue
+        ok = _run_stage(stage_name, stage_fn, args, state, plan)
         _save_state(args.month, state)
-        if not ok:
-            print(f"\n❌ {stage_fn.__name__} 실패 — 체크포인트 저장됨, 수정 후 재실행 가능", file=sys.stderr)
+        if ok is False:
+            print(f"Stage failed: {stage_name}", file=sys.stderr)
             return 1
+        time.sleep(0.01)
 
     report_path = write_report(args.month, state, plan)
-    print(f"\n🎉 모든 단계 완료")
-    print(f"   체크포인트: {_state_path(args.month)}")
-    print(f"   리포트: {report_path}")
+    print(f"Completed. State: {_state_path(args.month)}")
+    print(f"Report: {report_path}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

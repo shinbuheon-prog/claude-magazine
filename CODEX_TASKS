@@ -53,6 +53,6 @@ TASK_046 | Figma 실구현 (무료 REST API, MCP 없이, personal drafts + paste
 TASK_047 | 이미지 backend 실구현 (무료 전용: Pollinations + HuggingFace, fallback chain) | merged
 TASK_048 | 운영 관측 위젯 — cache·citations·illustration provider (TASK_028 대시보드 확장) | merged
 TASK_049 | editorial_lint pytest 스위트 정비 (15 체크 커버리지 ≥80%) | merged
-TASK_050 | publish_monthly UX 보강 (--status·--reset-stage·--from-stage + 텔레메트리) | implemented
+TASK_050 | publish_monthly UX 보강 (--status·--reset-stage·--from-stage + 텔레메트리) | merged
 TASK_051 | 발행 실패 복구 플레이북 (spec/failure_playbook.yml + 자동 가이드 생성) | todo
 TASK_052 | GitHub Actions CI 확장 (pytest + npm build + check_env + spec-lint + mojibake-scan) | todo

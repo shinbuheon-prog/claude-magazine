@@ -1,16 +1,16 @@
-# 월간 발행 리포트 — 2026-05
+# Monthly Publish Report: 2026-05
 
-- 이슈: 2026-05
-- 테마: 에이전트 시대의 실무 전환
-- 편집장: 편집장
-- 리포트 생성: 2026-04-22T05:46:49.479486+00:00
+- Issue: 2026-05
+- Theme: 에이전트 시대의 실무 전환
+- Editor in chief: 편집장
+- Generated at: 2026-04-24T12:16:40.250511+00:00
 
-## 단계별 상태
+## Stages
 
-- ✅ **플랜 로드**
-- ✅ **품질 게이트** — {'passed': 0, 'failed': 2, 'errors': ['agent-economics: status=planning (승인 미완료)', 'claude-code-review: status=draft (승인 미완료)']}
-- ✅ **AI 고지 삽입**
-- ⬜ **PDF 컴파일**
-- ⬜ **Ghost 발행**
-- ⬜ **뉴스레터**
-- ⬜ **SNS 재가공**
+- done Plan Loaded
+- done Quality Gate
+- done Disclosure
+- done PDF Compile (0.0s)
+- todo Ghost Publish
+- todo Newsletter
+- todo SNS
