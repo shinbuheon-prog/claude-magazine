@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-24 12:02
+# 업데이트: 2026-04-24 13:15
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -49,3 +49,5 @@ TASK_042 | Figma MCP 옵션 조사 + slide JSON 통합 설계안 (docs/figma_int
 TASK_043 | 이미지 생성 provider 매트릭스 + illustration_hook 어댑터 설계 (docs + ABC 스켈레톤) | merged
 TASK_044 | Prompt Caching 도입 (fact_checker·editorial_lint·brief_generator) | merged
 TASK_045 | Citations API 이중 운영 도입 (source-id 체크 보강) | merged
+TASK_048 | 운영 관측 위젯 — cache·citations·illustration provider (TASK_028 대시보드 확장) | todo
+TASK_049 | editorial_lint pytest 스위트 정비 (15 체크 커버리지 ≥80%) | todo
