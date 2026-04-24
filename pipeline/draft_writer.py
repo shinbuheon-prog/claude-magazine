@@ -76,6 +76,18 @@ def _build_dry_run_draft(brief: dict, section_name: str) -> str:
     )
 
 
+def _derive_article_id(brief: dict, section_name: str) -> str:
+    base = str(
+        brief.get("article_id")
+        or brief.get("slug")
+        or brief.get("working_title")
+        or section_name
+    )
+    slug = re.sub(r"[^\w\s-]", " ", base, flags=re.UNICODE)
+    slug = re.sub(r"[\s_-]+", "-", slug).strip("-").lower()
+    return slug[:50] or "article"
+
+
 def write_section(brief: dict, section_name: str, source_bundle: str = "", dry_run: bool = False) -> str:
     if dry_run:
         draft_text = _build_dry_run_draft(brief, section_name)
@@ -146,19 +158,33 @@ def main() -> None:
     parser.add_argument("--section", required=True, help="작성할 섹션명")
     parser.add_argument("--sources", help="소스 번들 파일 경로 (선택)")
     parser.add_argument("--out", help="출력 마크다운 파일 경로 (생략 시 stdout)")
+    parser.add_argument("--illustrate", action="store_true", help="본문 일러스트 placeholder/image hook 삽입")
     parser.add_argument("--dry-run", action="store_true", help="API 호출 없이 샘플 초안 생성")
     args = parser.parse_args()
 
     brief = json.loads(Path(args.brief).read_text(encoding="utf-8-sig"))
     source_bundle = Path(args.sources).read_text(encoding="utf-8-sig") if args.sources else ""
     draft = write_section(brief, args.section, source_bundle, dry_run=args.dry_run)
+    if args.illustrate:
+        try:
+            from pipeline.illustration_hook import inject_illustrations
+        except ModuleNotFoundError:
+            from illustration_hook import inject_illustrations  # type: ignore
+
+        out_path = Path(args.out) if args.out else None
+        draft = inject_illustrations(
+            draft,
+            article_id=_derive_article_id(brief, args.section),
+            skill="baoyu-article-illustrator",
+            relative_to=out_path,
+        )
 
     if args.out:
         Path(args.out).write_text(draft, encoding="utf-8")
         print(f"초안 저장 완료: {args.out}", file=sys.stderr)
         return
 
-    if args.dry_run:
+    if args.dry_run or args.illustrate:
         print(draft)
 
 

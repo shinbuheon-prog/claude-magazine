@@ -119,9 +119,19 @@ def validate_skill(skill_path: Path) -> dict:
     return result
 
 
+def validate_language_adaptation(body: str, lang: str) -> list[str]:
+    warnings: list[str] = []
+    if lang == "ko":
+        if not re.search(r"[가-힣]", body):
+            warnings.append("한국어 적응 부족: 본문에 한글이 거의 없음")
+    return warnings
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Claude Code Skills 검증")
     parser.add_argument("--strict", action="store_true", help="경고도 실패로 간주")
+    parser.add_argument("--skill", help="특정 skill 폴더명만 검사")
+    parser.add_argument("--lang", choices=["ko"], help="언어 적응 검사")
     args = parser.parse_args()
 
     if not SKILLS_DIR.exists():
@@ -129,6 +139,8 @@ def main() -> int:
         return 1
 
     skill_dirs = sorted([d for d in SKILLS_DIR.iterdir() if d.is_dir()])
+    if args.skill:
+        skill_dirs = [d for d in skill_dirs if d.name == args.skill]
     if not skill_dirs:
         print(f"⚠️  Skills 폴더 비어있음: {SKILLS_DIR}")
         return 0
@@ -141,6 +153,8 @@ def main() -> int:
     for idx, skill_dir in enumerate(skill_dirs, 1):
         skill_md = skill_dir / "SKILL.md"
         result = validate_skill(skill_md)
+        if args.lang:
+            result["warnings"].extend(validate_language_adaptation(skill_md.read_text(encoding="utf-8"), args.lang))
 
         status_icon = "✅"
         if result["errors"]:

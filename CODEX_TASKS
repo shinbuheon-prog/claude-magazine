@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-22 12:30
+# 업데이트: 2026-04-24 10:36
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -33,17 +33,15 @@ TASK_026 | 편집자 판정 누적 시스템 (Expertise Diffusion) | merged
 TASK_027 | 자율 개선 루프 (Autonomous Optimization) | merged
 TASK_028 | 운영 투명성 대시보드 (Opacity to Transparency) | merged
 TASK_029 | 편집자 승인 UI (스캐폴딩 제거) | merged
-
-# ── Phase 5: Superpowers 철학 적용 (Skills + Worktree) ──
 TASK_030 | 매거진 전용 Claude Code Skills 정의 (.claude/skills/) | merged
 TASK_031 | Git Worktree 기반 Agent 병렬 위임 표준화 (AGENTS.md 확장) | merged
 TASK_032 | 소스 자동 수집 파이프라인 RSS·Atom (source_ingester.py) | merged
 TASK_033 | Claude Agent SDK 통합 — Max 구독 경유로 API 비용 0 | merged
-
-# ── Phase 5 확장: 80페이지 매거진 발행 체계 ──
 TASK_034 | 매거진 추가 컴포넌트 (TOC·Editorial·Colophon) | merged
 TASK_035 | 80페이지 월간 PDF 컴파일러 (compile_monthly_pdf.py) | merged
 TASK_036 | 월간 플랜 관리 CLI (plan_issue.py) | merged
 TASK_037 | 월간 발행 원스톱 + 대시보드 진행률 위젯 | merged
 TASK_038 | typeui.sh 디자인 스킬 선별 도입 (mono·status·type scale) | merged
 TASK_039 | Claude Code 2.1.x 신기능 통합 (Opus 1M·/ultrareview·forking) | merged
+TASK_040 | baoyu-skills High 시너지 4종 선별 도입 (url-to-md·yt-transcript·article-illustrator·infographic) | merged
+TASK_041 | 카드뉴스 제작 스킬 + 밀도 게이트 (channel_rewriter 구조화) | implemented

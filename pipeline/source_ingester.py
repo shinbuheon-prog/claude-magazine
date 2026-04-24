@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT / "data" / "source_ingest_state.json"
 DEFAULT_FEEDS = ROOT / "config" / "feeds.yml"
+INGESTED_DIR = ROOT / "drafts" / "ingested"
 NETWORK_TIMEOUT = 15
 CONTENT_PREVIEW_MAX = 150
 
@@ -65,7 +67,14 @@ def _load_feeds(feeds_path: str | Path) -> list[dict[str, Any]]:
         data = yaml.safe_load(f) or {}
 
     feeds = data.get("feeds", [])
-    return [f for f in feeds if f.get("enabled", True)]
+    normalized = []
+    for item in feeds:
+        if not item.get("enabled", True):
+            continue
+        row = dict(item)
+        row["type"] = str(row.get("type", "rss")).lower()
+        normalized.append(row)
+    return normalized
 
 
 def _load_state() -> dict[str, str]:
@@ -114,6 +123,129 @@ def _entry_preview(entry: Any, max_chars: int = CONTENT_PREVIEW_MAX) -> str:
     clean = re.sub(r"<[^>]+>", " ", summary)
     clean = re.sub(r"\s+", " ", clean).strip()
     return clean[:max_chars]
+
+
+def _slugify(value: str, fallback: str = "item") -> str:
+    text = re.sub(r"[^\w\s-]", " ", value, flags=re.UNICODE)
+    text = re.sub(r"[\s_-]+", "-", text).strip("-").lower()
+    return text[:80] or fallback
+
+
+def _fetch_text_content(url: str) -> tuple[str, str]:
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+    except ImportError as exc:
+        raise RuntimeError("requests/beautifulsoup4 미설치 — URL 수집 불가") from exc
+
+    response = requests.get(url, timeout=NETWORK_TIMEOUT, headers={"User-Agent": "claude-magazine/1.0"})
+    response.raise_for_status()
+    html = response.text
+    soup = BeautifulSoup(html, "html.parser")
+    title = (soup.title.string if soup.title and soup.title.string else "").strip()
+    paras = []
+    for tag in soup.find_all(["p", "li"]):
+        text = " ".join(tag.get_text(" ", strip=True).split())
+        if text:
+            paras.append(text)
+        if len(paras) >= 8:
+            break
+    body = "\n\n".join(paras)
+    if not body:
+        body = "본문 추출 실패 — 외부 스킬 또는 수동 검토 필요"
+    return title or url, body
+
+
+def _write_ingested_markdown(kind: str, slug: str, title: str, source_url: str, body: str) -> Path:
+    target_dir = INGESTED_DIR / kind
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / f"{slug}.md"
+    content = (
+        f"# {title}\n\n"
+        f"- kind: {kind}\n"
+        f"- source_url: {source_url}\n"
+        f"- ingested_at: {datetime.now(timezone.utc).isoformat()}\n\n"
+        f"{body}\n"
+    )
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _extract_youtube_video_id(url: str) -> str | None:
+    patterns = [
+        r"v=([A-Za-z0-9_-]{11})",
+        r"youtu\.be/([A-Za-z0-9_-]{11})",
+        r"/embed/([A-Za-z0-9_-]{11})",
+        r"/shorts/([A-Za-z0-9_-]{11})",
+        r"^([A-Za-z0-9_-]{11})$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def ingest_url(feed_config: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+    source_url = str(feed_config.get("url", "")).strip()
+    if not source_url:
+        raise ValueError("url type feed에 url 필수")
+
+    name = str(feed_config.get("name") or source_url)
+    if dry_run:
+        title = name
+        body = "dry-run URL 수집 미리보기 — 실제 HTML fetch 생략"
+    else:
+        title, body = _fetch_text_content(source_url)
+
+    slug = _slugify(title, fallback="url-source")
+    artifact_path = None if dry_run else _write_ingested_markdown("url", slug, title, source_url, body)
+    return {
+        "title": title,
+        "preview": body[:CONTENT_PREVIEW_MAX],
+        "artifact_path": str(artifact_path.relative_to(ROOT)) if artifact_path else "",
+        "entry_url": source_url,
+        "publisher": name,
+        "topics": list(feed_config.get("topics", [])),
+        "classified_by": "baoyu-url-to-markdown-wrapper",
+    }
+
+
+def ingest_youtube(feed_config: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+    source_url = str(feed_config.get("url", "")).strip()
+    if not source_url:
+        raise ValueError("youtube type feed에 url 필수")
+
+    video_id = _extract_youtube_video_id(source_url)
+    if not video_id:
+        raise ValueError(f"YouTube video id 추출 실패: {source_url}")
+
+    title = str(feed_config.get("name") or f"YouTube {video_id}")
+    cover_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+    body_lines = [
+        "## Transcript",
+        "실제 자막 추출은 baoyu-youtube-transcript 런타임 또는 후속 수동 실행이 필요합니다.",
+        "",
+        "## Metadata",
+        f"- video_id: {video_id}",
+        f"- cover_image: {cover_url}",
+        f"- source_url: {source_url}",
+    ]
+    if dry_run:
+        body_lines.insert(1, "dry-run: 네트워크 호출 없이 메타데이터만 검증")
+
+    body = "\n".join(body_lines)
+    slug = _slugify(title, fallback=video_id.lower())
+    artifact_path = None if dry_run else _write_ingested_markdown("youtube", slug, title, source_url, body)
+    return {
+        "title": title,
+        "preview": f"YouTube transcript placeholder for {video_id}",
+        "artifact_path": str(artifact_path.relative_to(ROOT)) if artifact_path else "",
+        "entry_url": source_url,
+        "publisher": str(feed_config.get("publisher") or "YouTube"),
+        "topics": list(feed_config.get("topics", [])),
+        "classified_by": "baoyu-youtube-transcript-wrapper",
+    }
 
 
 # ── 피드 처리 ─────────────────────────────────────
@@ -266,11 +398,60 @@ def ingest_feeds(
     for feed_config in feeds:
         name = feed_config.get("name", "unknown")
         url = feed_config.get("url", "")
+        feed_type = str(feed_config.get("type", "rss")).lower()
         if not url:
             continue
 
         summary["feeds_processed"] += 1
-        detail: dict[str, Any] = {"feed": name, "new": 0, "dup": 0, "errors": []}
+        detail: dict[str, Any] = {"feed": name, "type": feed_type, "new": 0, "dup": 0, "errors": []}
+
+        if feed_type in {"url", "youtube"}:
+            summary["entries_fetched"] += 1
+            existing_id = detect_duplicate(url)
+            if existing_id:
+                summary["entries_duplicate"] += 1
+                detail["dup"] += 1
+                summary["details"].append(detail)
+                print(f"[{summary['feeds_processed']}/{len(feeds)}] {name}\n  ⏭  중복 URL — {existing_id}\n")
+                continue
+
+            try:
+                if feed_type == "url":
+                    processed = ingest_url(feed_config, dry_run=dry_run)
+                else:
+                    processed = ingest_youtube(feed_config, dry_run=dry_run)
+            except Exception as exc:
+                detail["errors"].append(f"{feed_type} 처리 실패: {exc}")
+                summary["entries_skipped"] += 1
+                summary["details"].append(detail)
+                print(f"[{summary['feeds_processed']}/{len(feeds)}] {name}\n  ❌ {exc}\n")
+                continue
+
+            detail["new"] += 1
+            summary["entries_new"] += 1
+            print(f"  - {processed['title'][:60]}{'...' if len(processed['title']) > 60 else ''}")
+
+            if not dry_run:
+                try:
+                    add_source(
+                        url=processed["entry_url"],
+                        publisher=processed["publisher"],
+                        content_preview=processed["preview"],
+                        rights_status="unknown",
+                        language=feed_config.get("language", "unknown"),
+                        stance=feed_config.get("stance", "neutral"),
+                        is_official=bool(feed_config.get("is_official", False)),
+                    )
+                    summary["entries_registered"] += 1
+                except Exception as exc:
+                    detail["errors"].append(f"등록 실패: {exc}")
+                    summary["entries_skipped"] += 1
+            summary["details"].append(detail)
+            print(
+                f"[{summary['feeds_processed']}/{len(feeds)}] {name}\n"
+                f"  📥 1건 조회 / {detail['new']}건 신규 / {detail['dup']}건 기존\n"
+            )
+            continue
 
         # state 기준 cutoff 결정
         if since_days is not None:
@@ -388,6 +569,15 @@ def _smoke_test() -> int:
     except Exception as e:
         print(f"   loadable error: {e}", file=sys.stderr)
     checks.append(("feeds 로드 (enabled 1+)", feeds_loadable))
+
+    # 4.5 url/youtube 타입 스키마 지원
+    has_ext_types = False
+    try:
+        raw_config = DEFAULT_FEEDS.read_text(encoding="utf-8")
+        has_ext_types = "type: url" in raw_config and "type: youtube" in raw_config
+    except Exception:
+        has_ext_types = False
+    checks.append(("feeds 확장 타입(url/youtube) 지원", has_ext_types))
 
     # 5. state 경로 생성 가능
     state_writable = False
