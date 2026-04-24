@@ -1,0 +1,108 @@
+# Claude Magazine 소스 자동 수집 피드 목록 (TASK_032)
+#
+# 필드:
+#   name: 피드 표시명 (unique)
+#   url: RSS/Atom URL
+#   language: ko | en | ja | zh
+#   stance: pro | neutral | con
+#   is_official: 공식 발행처 여부 (true/false)
+#   topics: 피드가 주로 다루는 주제 (태깅용)
+#   enabled: false로 두면 수집 제외
+
+feeds:
+  # ── AI 기술 공식 발행처 ──────────────────────
+  - name: "Anthropic News"
+    type: rss
+    url: "https://www.anthropic.com/news/feed.xml"
+    language: en
+    stance: neutral
+    is_official: true
+    topics: [claude, ai_models, anthropic]
+    enabled: true
+
+  - name: "OpenAI Blog"
+    type: rss
+    url: "https://openai.com/blog/rss.xml"
+    language: en
+    stance: neutral
+    is_official: true
+    topics: [gpt, ai_models, openai]
+    enabled: true
+
+  - name: "Google AI Blog"
+    type: rss
+    url: "https://blog.google/technology/ai/rss/"
+    language: en
+    stance: neutral
+    is_official: true
+    topics: [gemini, ai_models, google]
+    enabled: true
+
+  # ── 한국 공식 기관 ──────────────────────────
+  - name: "KISA 보도자료"
+    type: rss
+    url: "https://www.kisa.or.kr/20301/rss"
+    language: ko
+    stance: neutral
+    is_official: true
+    topics: [security, ai_regulation, privacy]
+    enabled: true
+
+  - name: "과기정통부 보도자료"
+    type: rss
+    url: "https://www.msit.go.kr/rss/msitRSS.do"
+    language: ko
+    stance: neutral
+    is_official: true
+    topics: [ict_policy, ai_policy]
+    enabled: true
+
+  # ── 기술 뉴스 ──────────────────────────────
+  - name: "TechCrunch AI"
+    type: rss
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+    language: en
+    stance: neutral
+    is_official: false
+    topics: [ai_news, startups]
+    enabled: true
+
+  # ── 커뮤니티 / 연구 ─────────────────────────
+  - name: "Hacker News (Front Page)"
+    type: rss
+    url: "https://hnrss.org/frontpage"
+    language: en
+    stance: neutral
+    is_official: false
+    topics: [tech_general, ai_news]
+    enabled: false  # 노이즈 많아 기본 비활성화
+
+  - name: "arXiv cs.AI (new)"
+    type: rss
+    url: "http://arxiv.org/rss/cs.AI"
+    language: en
+    stance: neutral
+    is_official: true
+    topics: [ai_research, papers]
+    enabled: false  # 수량 너무 많아 수동 활성화
+
+  # ── TASK_040: baoyu wrapper sample entries ─────────────────────────
+  - name: "Single URL Sample"
+    type: url
+    url: "https://example.com/article"
+    language: en
+    stance: neutral
+    is_official: false
+    topics: [sample, article]
+    skill: baoyu-url-to-markdown
+    enabled: false
+
+  - name: "YouTube Sample"
+    type: youtube
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    language: en
+    stance: neutral
+    is_official: false
+    topics: [sample, video]
+    skill: baoyu-youtube-transcript
+    enabled: false

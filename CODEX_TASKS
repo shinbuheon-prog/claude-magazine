@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-21 22:39
+# 업데이트: 2026-04-24 21:45
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -14,8 +14,45 @@ TASK_007 | n8n 워크플로우 자동화 (3개 워크플로우) | merged
 TASK_008 | Langfuse 관측 연동 | merged
 TASK_009 | 매거진 웹 레이아웃 컴포넌트 (React + Recharts) | merged
 TASK_010 | Puppeteer 기반 월간 PDF 생성 파이프라인 | merged
-TASK_011 | develop→main 머지 + v0.1.0 릴리즈 | todo
+TASK_011 | develop→main 머지 + v0.1.0 릴리즈 | merged
 TASK_012 | 운영환경 체크 스크립트 (check_env.py) | merged
 TASK_013 | 주간 브리프 E2E 스모크 테스트 (test_e2e.py) | merged
 TASK_014 | n8n 워크플로우 import 자동화 (n8n_import.py) | merged
 TASK_015 | Ghost Webhook 자동 등록 (ghost_webhook_setup.py) | merged
+TASK_016 | 편집 체크리스트 자동 검증 (editorial_lint.py) | merged
+TASK_017 | PII 비식별화 파이프라인 (pii_masker.py) | merged
+TASK_018 | AI 사용 고지 자동 삽입 (disclosure_injector.py) | merged
+TASK_019 | 소스 다양성 규칙 엔진 (source_diversity.py) | merged
+TASK_020 | 국내 결제 연동 PortOne (subscription_scheduler.py) | cancelled
+TASK_021 | 월간 커버 일러스트 드롭인 시스템 (CoverPage.jsx 확장) | merged
+TASK_022 | 매거진 템플릿 확장 (Interview·Review·Feature 3종) | merged
+TASK_023 | SNS 카드뉴스 자산 배포 파이프라인 (channel_rewriter.py 확장) | merged
+TASK_024 | Ghost Self-Hosted 배포 자동화 (deploy/docker-compose.yml) | merged
+TASK_025 | 기사 이상 상태(Pass/Fail) 스펙 시스템 (spec/article_standards.yml) | merged
+TASK_026 | 편집자 판정 누적 시스템 (Expertise Diffusion) | merged
+TASK_027 | 자율 개선 루프 (Autonomous Optimization) | merged
+TASK_028 | 운영 투명성 대시보드 (Opacity to Transparency) | merged
+TASK_029 | 편집자 승인 UI (스캐폴딩 제거) | merged
+TASK_030 | 매거진 전용 Claude Code Skills 정의 (.claude/skills/) | merged
+TASK_031 | Git Worktree 기반 Agent 병렬 위임 표준화 (AGENTS.md 확장) | merged
+TASK_032 | 소스 자동 수집 파이프라인 RSS·Atom (source_ingester.py) | merged
+TASK_033 | Claude Agent SDK 통합 — Max 구독 경유로 API 비용 0 | merged
+TASK_034 | 매거진 추가 컴포넌트 (TOC·Editorial·Colophon) | merged
+TASK_035 | 80페이지 월간 PDF 컴파일러 (compile_monthly_pdf.py) | merged
+TASK_036 | 월간 플랜 관리 CLI (plan_issue.py) | merged
+TASK_037 | 월간 발행 원스톱 + 대시보드 진행률 위젯 | merged
+TASK_038 | typeui.sh 디자인 스킬 선별 도입 (mono·status·type scale) | merged
+TASK_039 | Claude Code 2.1.x 신기능 통합 (Opus 1M·/ultrareview·forking) | merged
+TASK_040 | baoyu-skills High 시너지 4종 선별 도입 (url-to-md·yt-transcript·article-illustrator·infographic) | merged
+TASK_041 | 카드뉴스 제작 스킬 + 밀도 게이트 (channel_rewriter 구조화) | merged
+TASK_042 | Figma MCP 옵션 조사 + slide JSON 통합 설계안 (docs/figma_integration_plan.md) | merged
+TASK_043 | 이미지 생성 provider 매트릭스 + illustration_hook 어댑터 설계 (docs + ABC 스켈레톤) | merged
+TASK_044 | Prompt Caching 도입 (fact_checker·editorial_lint·brief_generator) | merged
+TASK_045 | Citations API 이중 운영 도입 (source-id 체크 보강) | merged
+TASK_046 | Figma 실구현 (무료 REST API, MCP 없이, personal drafts + paste 패키지) | merged
+TASK_047 | 이미지 backend 실구현 (무료 전용: Pollinations + HuggingFace, fallback chain) | merged
+TASK_048 | 운영 관측 위젯 — cache·citations·illustration provider (TASK_028 대시보드 확장) | merged
+TASK_049 | editorial_lint pytest 스위트 정비 (15 체크 커버리지 ≥80%) | merged
+TASK_050 | publish_monthly UX 보강 (--status·--reset-stage·--from-stage + 텔레메트리) | merged
+TASK_051 | 발행 실패 복구 플레이북 (spec/failure_playbook.yml + 자동 가이드 생성) | merged
+TASK_052 | GitHub Actions CI 확장 (pytest + npm build + check_env + spec-lint + mojibake-scan) | merged

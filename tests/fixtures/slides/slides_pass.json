@@ -1,0 +1,32 @@
+{
+  "slides": [
+    {
+      "idx": 1,
+      "role": "hook",
+      "main_copy": "Why this launch matters now",
+      "sub_copy": "Teams need a fast summary before spending cycles.",
+      "highlight": "Hook readers in one frame."
+    },
+    {
+      "idx": 2,
+      "role": "body",
+      "main_copy": "Alpha Corp shipped a new assistant and explained the rollout plan in detail. The release note describes the enterprise controls and migration path clearly.",
+      "sub_copy": "The source also states that admins can phase adoption team by team. It gives enough context to understand impact beyond the headline.",
+      "highlight": "12% growth and controlled rollout"
+    },
+    {
+      "idx": 3,
+      "role": "body",
+      "main_copy": "Beta teams highlighted governance, cost control, and internal review. The source mentions model selection, permissions, and auditability in separate sections.",
+      "sub_copy": "That means the card can summarize risk, cost, and workflow without inventing new claims. Each slide still needs complete sentences, not fragments only.",
+      "highlight": "governance, cost, workflow"
+    },
+    {
+      "idx": 4,
+      "role": "cta",
+      "main_copy": "Read the full magazine breakdown",
+      "sub_copy": "Open the article for the full evidence map and editorial notes.",
+      "highlight": "CTA"
+    }
+  ]
+}

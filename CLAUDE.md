@@ -109,6 +109,24 @@ claude-magazine/
 │   ├── source_policy.md
 │   └── governance.md
 │
+├── .claude/               ← Claude Code Skills (TASK_030)
+│   └── skills/                 ← 매거진 전용 skill 5종
+│       ├── editorial-review/   - 발행 전 10개 체크 자동 실행
+│       ├── fact-check-cycle/   - 팩트체크→수정→재검증 루프
+│       ├── source-validation/  - 소스 다양성 4규칙
+│       ├── publish-gate/       - 통합 발행 게이트
+│       └── sns-distribution/   - 4채널 재가공 + 자산 체크
+│
+├── spec/                  ← 기사 이상 상태 스펙 (TASK_025)
+│   ├── article_standards.yml   - 6 카테고리 pass/fail 기준
+│   └── README.md
+│
+├── config/                ← 운영 설정 (TASK_032)
+│   └── feeds.yml               - RSS/Atom 피드 구독 목록
+│
+├── reports/               ← 자율 개선 루프 출력 (TASK_027)
+│   └── improvement_YYYY-MM-DD.md
+│
 ├── data/                  ← DB (gitignore)
 ├── drafts/                ← 생성된 초안 (gitignore)
 └── logs/                  ← API 로그 (gitignore)

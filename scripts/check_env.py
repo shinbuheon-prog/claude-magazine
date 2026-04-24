@@ -463,7 +463,7 @@ def main() -> int:
         plan = [step for step in plan if step[1] in keys]
         if not plan:
             print(f"[WARN] --only {args.only} — 매칭되는 항목 없음")
-            print(f"       사용 가능: env, anthropic, ghost, db, langfuse, deps, folders")
+            print("       사용 가능: env, anthropic, ghost, db, langfuse, deps, folders")
             return 0
 
     print("=== Claude Magazine 운영환경 체크 ===\n")

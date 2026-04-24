@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { THEME, TYPE } from '../theme';
 
@@ -25,6 +25,7 @@ import { THEME, TYPE } from '../theme';
  */
 const InsightPage = ({ insightData = {} }) => {
   const {
+    layout = 'chart',
     insightNum = "01",
     title = "Claude API 비용 추이 분석 (2024-2026)",
     chartData = [
@@ -36,9 +37,159 @@ const InsightPage = ({ insightData = {} }) => {
     ],
     statA = { label: "Sonnet 출력 단가", value: "$15", unit: "3년간 동결" },
     statB = { label: "Opus 출력 단가", value: "$25", unit: "↓ 지속 하락" },
+    comparisonData = [
+      { label: 'Claude Code', value: 'Max 구독 기반', note: '비용 예측 쉬움' },
+      { label: 'API 직접 호출', value: '토큰 기반 과금', note: '대량 처리 최적화' },
+    ],
+    timelineData = [
+      { label: "'24 Q1", title: 'Opus 중심기', body: '고가 모델 위주의 파일럿 운영' },
+      { label: "'25 Q1", title: 'Sonnet 안정화', body: '실무 자동화 기본 모델로 정착' },
+      { label: "'26 Q1", title: '에이전트 확장', body: '긴 컨텍스트와 운영 툴이 결합' },
+    ],
+    processFlow = [
+      { step: '1', title: '수집', body: '소스와 지표를 수집해 브리프 준비' },
+      { step: '2', title: '생성', body: '초안과 시각 자료를 병렬 생성' },
+      { step: '3', title: '검증', body: '팩트체크와 편집 게이트 수행' },
+    ],
     expertTip = "모델 비용보다 사람 시간과 구독 운영이 실제 병목입니다. Batch API 활용으로 비용을 50% 절감하세요.",
     sourceId = "src-003",
   } = insightData;
+
+  const renderVisual = () => {
+    if (layout === 'comparison') {
+      return (
+        <div className="grid h-full grid-cols-2 gap-4">
+          {comparisonData.map((item) => (
+            <article
+              key={item.label}
+              className="rounded-2xl border p-5"
+              style={{ backgroundColor: '#fffdf8', borderColor: '#E5E7EB' }}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: THEME.accent }}>
+                {item.label}
+              </p>
+              <p className="mt-4 text-2xl font-black italic" style={{ color: THEME.textMain }}>
+                {item.value}
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-gray-500">{item.note}</p>
+            </article>
+          ))}
+        </div>
+      );
+    }
+
+    if (layout === 'timeline') {
+      return (
+        <div className="relative pl-6">
+          <div className="absolute bottom-4 left-2 top-4 w-[2px]" style={{ backgroundColor: `${THEME.accent}55` }} />
+          <div className="space-y-5">
+            {timelineData.map((item) => (
+              <div key={item.label} className="relative rounded-2xl border bg-white p-4" style={{ borderColor: '#E5E7EB' }}>
+                <span className="absolute -left-[26px] top-5 h-3 w-3 rounded-full" style={{ backgroundColor: THEME.accent }} />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: THEME.accent }}>
+                  {item.label}
+                </p>
+                <h3 className="mt-2 text-lg font-black" style={{ color: THEME.textMain }}>{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-500">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (layout === 'process-flow') {
+      return (
+        <div className="space-y-4">
+          {processFlow.map((item, idx) => (
+            <div key={item.step}>
+              <div className="flex items-start gap-4 rounded-2xl border bg-white p-4" style={{ borderColor: '#E5E7EB' }}>
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black text-white"
+                  style={{ backgroundColor: idx === 1 ? THEME.accent : THEME.primary }}
+                >
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className="text-base font-black" style={{ color: THEME.textMain }}>{item.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-500">{item.body}</p>
+                </div>
+              </div>
+              {idx < processFlow.length - 1 && (
+                <div className="ml-5 h-6 w-[2px]" style={{ backgroundColor: `${THEME.primary}33` }} />
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xs font-bold text-gray-400 flex items-center gap-2">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: THEME.accent }}
+            />
+            출력 단가 추이 ($ / MTok)
+          </h3>
+          <span className="text-[10px] text-gray-300">Unit: USD/MTok</span>
+        </div>
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis
+                dataKey="year"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#9CA3AF' }}
+              />
+              <YAxis hide domain={[0, 100]} />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  fontSize: '12px',
+                }}
+                formatter={(v) => [`$${v}`, '']}
+              />
+              <Line
+                type="monotone"
+                dataKey="sonnet"
+                stroke={THEME.lineA}
+                strokeWidth={3}
+                dot={{ r: 5, fill: THEME.lineA }}
+                label={{ position: 'top', fontSize: 11, fontWeight: 'bold', fill: THEME.lineA }}
+                name="Sonnet (출력)"
+              />
+              <Line
+                type="monotone"
+                dataKey="opus"
+                stroke={THEME.lineB}
+                strokeWidth={3}
+                dot={{ r: 5, fill: THEME.lineB }}
+                label={{ position: 'top', fontSize: 11, fontWeight: 'bold', fill: THEME.lineB }}
+                name="Opus (출력)"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex justify-center space-x-6 mt-4 text-[11px] font-bold text-gray-400">
+          <span className="flex items-center gap-1.5">
+            <i className="w-3 h-3 rounded-full" style={{ backgroundColor: THEME.lineA }} />
+            Sonnet 출력
+          </span>
+          <span className="flex items-center gap-1.5">
+            <i className="w-3 h-3 rounded-full" style={{ backgroundColor: THEME.lineB }} />
+            Opus 출력
+          </span>
+        </div>
+      </>
+    );
+  };
 
   return (
     <div
@@ -67,68 +218,7 @@ const InsightPage = ({ insightData = {} }) => {
             className="col-span-8 p-6 rounded-2xl border shadow-sm"
             style={{ backgroundColor: THEME.bgLight, borderColor: '#E5E7EB' }}
           >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xs font-bold text-gray-400 flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: THEME.accent }}
-                />
-                출력 단가 추이 ($ / MTok)
-              </h3>
-              <span className="text-[10px] text-gray-300">Unit: USD/MTok</span>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="year"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                  />
-                  <YAxis hide domain={[0, 100]} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: 'none',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      fontSize: '12px',
-                    }}
-                    formatter={(v) => [`$${v}`, '']}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="sonnet"
-                    stroke={THEME.lineA}
-                    strokeWidth={3}
-                    dot={{ r: 5, fill: THEME.lineA }}
-                    label={{ position: 'top', fontSize: 11, fontWeight: 'bold', fill: THEME.lineA }}
-                    name="Sonnet (출력)"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="opus"
-                    stroke={THEME.lineB}
-                    strokeWidth={3}
-                    dot={{ r: 5, fill: THEME.lineB }}
-                    label={{ position: 'top', fontSize: 11, fontWeight: 'bold', fill: THEME.lineB }}
-                    name="Opus (출력)"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            {/* 범례 */}
-            <div className="flex justify-center space-x-6 mt-4 text-[11px] font-bold text-gray-400">
-              <span className="flex items-center gap-1.5">
-                <i className="w-3 h-3 rounded-full" style={{ backgroundColor: THEME.lineA }} />
-                Sonnet 출력
-              </span>
-              <span className="flex items-center gap-1.5">
-                <i className="w-3 h-3 rounded-full" style={{ backgroundColor: THEME.lineB }} />
-                Opus 출력
-              </span>
-            </div>
+            {renderVisual()}
           </div>
 
           {/* 우측 지표 + 출처 */}

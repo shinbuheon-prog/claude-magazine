@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--sources", nargs="*", default=[], help="소스 파일 경로들")
     parser.add_argument("--article-id", help="출처 레지스트리 기사 ID")
     parser.add_argument("--publish", action="store_true", help="팩트체크 후 발행")
+    parser.add_argument("--strict-diversity", action="store_true", help="소스 다양성 실패 시 중단")
     args = parser.parse_args()
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -36,7 +37,12 @@ def main():
     # 1. 브리프 생성
     print("\n[1/4] 브리프 생성 중...")
     source_bundle = load_sources(args.sources)
-    brief = generate_brief(args.topic, source_bundle)
+    brief = generate_brief(
+        args.topic,
+        source_bundle,
+        article_id=args.article_id or "",
+        strict_diversity=args.strict_diversity,
+    )
     brief_path = DRAFTS_DIR / f"monthly_brief_{ts}.json"
     brief_path.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"브리프 저장: {brief_path}")

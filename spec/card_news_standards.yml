@@ -1,0 +1,23 @@
+common:
+  must_pass:
+    - id: "density_pass"
+      rule: "모든 슬라이드가 밀도 규칙 충족"
+      measure: "all slides pass density gate"
+    - id: "fidelity_pass"
+      rule: "원문 포인트 커버리지 80% 이상"
+      measure: "coverage >= 0.8"
+    - id: "count_pass"
+      rule: "원문 길이 대비 슬라이드 수 적정"
+      measure: "count in recommended range"
+
+categories:
+  instagram:
+    must_pass:
+      - id: "hook_cta_present"
+        rule: "첫 장 hook, 마지막 장 cta 존재"
+        measure: "slides[0].role == hook AND slides[-1].role == cta"
+  sns:
+    must_pass:
+      - id: "hook_cta_present"
+        rule: "첫 장 hook, 마지막 장 cta 존재"
+        measure: "slides[0].role == hook AND slides[-1].role == cta"

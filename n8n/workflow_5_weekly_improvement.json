@@ -1,0 +1,130 @@
+{
+  "name": "Claude Magazine — Weekly Autonomous Improvement (TASK_027)",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyWeek",
+              "hour": 23,
+              "minute": 0,
+              "weekday": "sunday",
+              "timezone": "Asia/Seoul"
+            }
+          ]
+        }
+      },
+      "name": "Cron (Sun 23:00 KST)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "command": "=python scripts/weekly_improvement.py --since-days 7",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}"
+      },
+      "name": "Execute weekly_improvement.py",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 900000
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=[weekly_improvement] 주간 개선 제안 생성 완료\nstdout:\n{{$node[\"Execute weekly_improvement.py\"].json[\"stdout\"]}}\nstderr:\n{{$node[\"Execute weekly_improvement.py\"].json[\"stderr\"]}}\n\n사람이 reports/improvement_YYYY-MM-DD.md를 검토해 diff를 적용하세요.",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (Editor)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "command": "=python scripts/weekly_improvement.py --since-days 7 --create-issue",
+        "cwd": "={{$env.CLAUDE_MAGAZINE_ROOT}}"
+      },
+      "name": "(Optional) Create GitHub Issue",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [720, 480],
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 600]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "webhookUrl": "={{$env.NOTIFY_SLACK_WEBHOOK}}",
+        "text": "=[workflow_5 실패] execution: {{$json[\"execution\"][\"id\"]}}\nnode: {{$json[\"execution\"][\"lastNodeExecuted\"]}}\nerror: {{$json[\"execution\"][\"error\"][\"message\"]}}",
+        "otherOptions": {}
+      },
+      "name": "Slack Notify (Error)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [480, 600]
+    }
+  ],
+  "connections": {
+    "Cron (Sun 23:00 KST)": {
+      "main": [
+        [
+          {
+            "node": "Execute weekly_improvement.py",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute weekly_improvement.py": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (Editor)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "timezone": "Asia/Seoul"
+  },
+  "id": "workflow_5_weekly_improvement",
+  "tags": [
+    {
+      "name": "claude-magazine"
+    },
+    {
+      "name": "autonomous-improvement"
+    }
+  ]
+}

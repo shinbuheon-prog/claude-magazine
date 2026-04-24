@@ -1,0 +1,18 @@
+{
+  "slides": [
+    {
+      "idx": 1,
+      "role": "body",
+      "main_copy": "This starts as body, not hook.",
+      "sub_copy": "That should fail structure.",
+      "highlight": "bad"
+    },
+    {
+      "idx": 2,
+      "role": "cta",
+      "main_copy": "Read more",
+      "sub_copy": "CTA",
+      "highlight": "cta"
+    }
+  ]
+}

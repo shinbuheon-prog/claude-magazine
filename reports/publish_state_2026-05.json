@@ -1,0 +1,26 @@
+{
+  "month": "2026-05",
+  "stages": {
+    "plan_loaded": true,
+    "article_count": 2,
+    "quality_gate": {
+      "passed": 0,
+      "failed": 2,
+      "errors": [
+        "agent-economics: status=planning (승인 미완료)",
+        "claude-code-review: status=draft (승인 미완료)"
+      ]
+    },
+    "disclosure_injected": true,
+    "pdf_compiled": true
+  },
+  "telemetry": {
+    "pdf_compile": {
+      "started": "2026-04-24T12:16:40.202747+00:00",
+      "finished": "2026-04-24T12:16:40.202780+00:00",
+      "duration_sec": 0.0,
+      "cost_usd": null
+    }
+  },
+  "last_updated": "2026-04-24T12:17:16.767873+00:00"
+}

@@ -1,0 +1,85 @@
+stages:
+  plan_loaded:
+    common_failures:
+      - class: plan_file_missing
+        detector: 'FileNotFoundError|Plan not found: .*drafts/issues'
+        recovery:
+          - 'Check drafts/issues/<month>.yml exists'
+          - 'Recreate the plan with python scripts/plan_issue.py --month <month>'
+      - class: yaml_parse_error
+        detector: 'yaml\\.(scanner|parser)|YAMLError|mapping values are not allowed'
+        recovery:
+          - 'Validate drafts/issues/<month>.yml syntax'
+          - 'Resave the file as UTF-8 and remove broken indentation'
+  quality_gate:
+    common_failures:
+      - class: article_status_not_approved
+        detector: 'status=(draft|lint|planning)'
+        recovery:
+          - 'Set the affected article statuses to approved before publish'
+          - 'Use --force only when editorial ownership is explicit'
+      - class: editorial_lint_fail
+        detector: 'Quality gate failed|source-id|ai-disclosure|correction-policy|lint'
+        recovery:
+          - 'Run python pipeline/editorial_lint.py --draft <path> --strict'
+          - 'Fix source-id, AI disclosure, and correction policy first'
+  disclosure_injected:
+    common_failures:
+      - class: disclosure_write_failed
+        detector: 'PermissionError|FileNotFoundError|disclosure'
+        recovery:
+          - 'Check the target draft path still exists and is writable'
+          - 'Rerun from disclosure_injected after fixing permissions'
+      - class: disclosure_content_conflict
+        detector: 'already completed|duplicate disclosure|markdown'
+        recovery:
+          - 'Inspect the draft for duplicate disclosure sections'
+          - 'Reset the disclosure stage and rerun once the draft is clean'
+  pdf_compile:
+    common_failures:
+      - class: puppeteer_timeout
+        detector: 'TimeoutError|puppeteer|generate_pdf'
+        recovery:
+          - 'Install or refresh Node dependencies for the PDF toolchain'
+          - 'Run node scripts/generate_pdf.js --month <month> --verbose'
+      - class: vite_build_fail
+        detector: 'vite|build failed|npm run build|jsx'
+        recovery:
+          - 'Run cd web && npm run build'
+          - 'Fix JSX/import/build errors before rerunning pdf_compile'
+  ghost_publish:
+    common_failures:
+      - class: jwt_401
+        detector: '401|Unauthorized|GHOST_ADMIN_API_KEY|Ghost Publish'
+        recovery:
+          - 'Verify GHOST_ADMIN_API_KEY is a valid kid:secret pair'
+          - 'Run python scripts/check_env.py --only ghost'
+      - class: publish_confirmation_missing
+        detector: '--confirm is required'
+        recovery:
+          - 'Rerun with --publish --confirm once the issue is ready'
+          - 'If publish was accidental, leave the stage untouched'
+  newsletter:
+    common_failures:
+      - class: members_api_disabled
+        detector: 'Members API|newsletter|mail'
+        recovery:
+          - 'Check Ghost members/newsletter settings and outbound mail config'
+          - 'Rerun from newsletter after Ghost is ready'
+      - class: publish_flag_missing
+        detector: '--publish not set'
+        recovery:
+          - 'Use --publish when you intend to send a newsletter'
+          - 'Otherwise treat this as an intentional skip, not a failure'
+  sns:
+    common_failures:
+      - class: channel_rewriter_timeout
+        detector: 'timeout|channel_rewriter|sns'
+        recovery:
+          - 'Inspect the latest channel_rewriter log and request_id'
+          - 'Rerun from sns after provider or prompt issues are fixed'
+      - class: publish_flag_missing
+        detector: '--publish not set|--skip-sns'
+        recovery:
+          - 'Use --publish without --skip-sns to generate social assets'
+          - 'Otherwise treat the stage as intentionally skipped'
