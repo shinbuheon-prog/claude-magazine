@@ -24,6 +24,7 @@ reports/*.failures.json
 
 # Pytest 런타임 아티팩트 (TASK_049)
 .tmp_pytest/
+.tmp_pytest_*/
 reports/.tracecov/
 .pytest_cache/
 .coverage

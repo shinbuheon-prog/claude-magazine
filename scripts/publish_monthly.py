@@ -33,6 +33,11 @@ except ImportError:
     print("PyYAML is required.", file=sys.stderr)
     sys.exit(1)
 
+try:
+    from pipeline.failure_playbook import generate_failure_report
+except ModuleNotFoundError:
+    from failure_playbook import generate_failure_report  # type: ignore
+
 ROOT = Path(__file__).resolve().parent.parent
 ISSUES_DIR = ROOT / "drafts" / "issues"
 REPORTS_DIR = ROOT / "reports"
@@ -87,6 +92,7 @@ def _normalize_state(state: dict[str, Any], month: str) -> dict[str, Any]:
         "month": state.get("month") or month,
         "stages": dict(state.get("stages") or {}),
         "telemetry": dict(state.get("telemetry") or {}),
+        "errors": dict(state.get("errors") or {}),
         "last_updated": state.get("last_updated"),
     }
     stages = normalized["stages"]
@@ -211,9 +217,28 @@ def reset_stage(month: str, state: dict[str, Any], stage: str) -> int:
     key = STAGE_STATE_KEYS[stage]
     state.get("stages", {}).pop(key, None)
     state.get("telemetry", {}).pop(stage, None)
+    state.get("errors", {}).pop(stage, None)
     _save_state(month, state)
     print(f"Reset stage: {stage}")
     return 0
+
+
+def _set_stage_error(state: dict[str, Any], stage: str, message: str) -> None:
+    state.setdefault("errors", {})[stage] = message
+
+
+def _clear_stage_error(state: dict[str, Any], stage: str) -> None:
+    state.setdefault("errors", {}).pop(stage, None)
+
+
+def _write_failure_playbook(month: str, stage: str, error_output: str) -> Path:
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = REPORTS_DIR / f"failure_{month}_{stage}.md"
+    path.write_text(
+        generate_failure_report(month, stage, error_output, _state_path(month)),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _stage_start_message(stage: str, index: int) -> str:
@@ -223,17 +248,20 @@ def _stage_start_message(stage: str, index: int) -> str:
 def stage_plan_loaded(args, state, plan) -> bool | None:
     if state["stages"].get("plan_loaded"):
         print(f"{_stage_start_message('plan_loaded', 1)} already completed")
+        _clear_stage_error(state, "plan_loaded")
         return True
     total = len(plan.get("articles", []))
     print(f"{_stage_start_message('plan_loaded', 1)}: {plan.get('issue')} ({total} articles)")
     state["stages"]["plan_loaded"] = True
     state["stages"]["article_count"] = total
+    _clear_stage_error(state, "plan_loaded")
     return True
 
 
 def stage_quality_gate(args, state, plan) -> bool | None:
     if state["stages"].get("quality_gate", {}).get("passed") is not None:
         print(f"{_stage_start_message('quality_gate', 2)} already completed")
+        _clear_stage_error(state, "quality_gate")
         return True
     articles = plan.get("articles", [])
     passed, failed, errors = 0, 0, []
@@ -248,19 +276,23 @@ def stage_quality_gate(args, state, plan) -> bool | None:
     state["stages"]["quality_gate"] = {"passed": passed, "failed": failed, "errors": errors[:10]}
     print(f"passed={passed} failed={failed}")
     if failed > 0 and not args.force:
+        _set_stage_error(state, "quality_gate", "\n".join(errors[:10]) or "Quality gate failed")
         print("Quality gate failed. Use --force to continue.", file=sys.stderr)
         return False
+    _clear_stage_error(state, "quality_gate")
     return True
 
 
 def stage_disclosure(args, state, plan) -> bool | None:
     if state["stages"].get("disclosure_injected"):
         print(f"{_stage_start_message('disclosure_injected', 3)} already completed")
+        _clear_stage_error(state, "disclosure_injected")
         return True
     print(f"{_stage_start_message('disclosure_injected', 3)}")
     if args.dry_run:
         print("(dry-run) disclosure injection skipped")
     state["stages"]["disclosure_injected"] = True
+    _clear_stage_error(state, "disclosure_injected")
     return True
 
 
@@ -270,6 +302,7 @@ def stage_pdf_compile(args, state, plan) -> bool | None:
         return None
     if state["stages"].get("pdf_compiled"):
         print(f"{_stage_start_message('pdf_compile', 4)} already completed")
+        _clear_stage_error(state, "pdf_compile")
         return True
     print(f"{_stage_start_message('pdf_compile', 4)}")
     cmd = ["python", str(ROOT / "scripts" / "compile_monthly_pdf.py"), "--month", args.month]
@@ -280,10 +313,12 @@ def stage_pdf_compile(args, state, plan) -> bool | None:
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as exc:
+        _set_stage_error(state, "pdf_compile", str(exc))
         print(f"PDF compile failed: {exc}", file=sys.stderr)
         return False
     pdf_path = ROOT / "output" / f"claude-magazine-{args.month}.pdf"
     state["stages"]["pdf_compiled"] = str(pdf_path) if pdf_path.exists() and not args.dry_run else True
+    _clear_stage_error(state, "pdf_compile")
     return True
 
 
@@ -293,16 +328,19 @@ def stage_ghost_publish(args, state, plan) -> bool | None:
         return None
     if state["stages"].get("ghost_published"):
         print(f"{_stage_start_message('ghost_publish', 5)} already completed")
+        _clear_stage_error(state, "ghost_publish")
         return True
     print(f"{_stage_start_message('ghost_publish', 5)}")
     if args.dry_run:
         print("(dry-run) ghost publish skipped")
         return None
     if not args.confirm:
+        _set_stage_error(state, "ghost_publish", "--confirm is required with --publish")
         print("--confirm is required with --publish", file=sys.stderr)
         return False
     published_ids = [a.get("slug") for a in plan.get("articles", []) if a.get("status") == "approved"]
     state["stages"]["ghost_published"] = published_ids
+    _clear_stage_error(state, "ghost_publish")
     return True
 
 
@@ -312,12 +350,14 @@ def stage_newsletter(args, state, plan) -> bool | None:
         return None
     if state["stages"].get("newsletter_sent"):
         print(f"{_stage_start_message('newsletter', 6)} already completed")
+        _clear_stage_error(state, "newsletter")
         return True
     print(f"{_stage_start_message('newsletter', 6)}")
     if args.dry_run:
         print("(dry-run) newsletter skipped")
         return None
     state["stages"]["newsletter_sent"] = True
+    _clear_stage_error(state, "newsletter")
     return True
 
 
@@ -327,6 +367,7 @@ def stage_sns(args, state, plan) -> bool | None:
         return None
     if state["stages"].get("sns_distributed"):
         print(f"{_stage_start_message('sns', 7)} already completed")
+        _clear_stage_error(state, "sns")
         return True
     print(f"{_stage_start_message('sns', 7)}")
     if args.dry_run:
@@ -338,6 +379,7 @@ def stage_sns(args, state, plan) -> bool | None:
         if article.get("status") in {"approved", "published"}
     }
     state["stages"]["sns_distributed"] = distributed
+    _clear_stage_error(state, "sns")
     return True
 
 
@@ -424,7 +466,9 @@ def main() -> int:
     try:
         plan = load_plan(args.month)
     except FileNotFoundError as exc:
+        failure_path = _write_failure_playbook(args.month, "plan_loaded", str(exc))
         print(str(exc), file=sys.stderr)
+        print(f"Recovery guide: {failure_path}", file=sys.stderr)
         return 1
 
     stages: list[tuple[str, Callable[..., bool | None]]] = [
@@ -444,7 +488,13 @@ def main() -> int:
         ok = _run_stage(stage_name, stage_fn, args, state, plan)
         _save_state(args.month, state)
         if ok is False:
+            failure_path = _write_failure_playbook(
+                args.month,
+                stage_name,
+                state.get("errors", {}).get(stage_name) or f"Stage failed: {stage_name}",
+            )
             print(f"Stage failed: {stage_name}", file=sys.stderr)
+            print(f"Recovery guide: {failure_path}", file=sys.stderr)
             return 1
         time.sleep(0.01)
 

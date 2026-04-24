@@ -35,3 +35,13 @@ python scripts/publish_monthly.py --month 2026-05 --dry-run
 
 - Stage telemetry is stored under `telemetry` inside the publish state JSON.
 - `quality_gate` and `ghost_publish` try to attach `cost_usd` when logs expose that signal.
+
+## When A Stage Fails
+
+- `publish_monthly.py` now writes `reports/failure_<month>_<stage>.md`
+- Use the generated recovery guide first, then rerun:
+
+```bash
+python scripts/publish_monthly.py --month 2026-05 --reset-stage <stage> --yes
+python scripts/publish_monthly.py --month 2026-05
+```
