@@ -218,22 +218,23 @@ TASK_054의 `--trigger-improvement`는 수동 confirmation prompt. 신뢰가 쌓
 
 ---
 
-## SNS 디제스트 갭 분석 — 2026-05 brief 큐 후보 5건
+## SNS 디제스트 갭 분석 — 2026-05 brief 큐 후보 6건
 
-**출처**: [reports/monthly_digest_2026-04-W3.md](../reports/monthly_digest_2026-04-W3.md) §3 갭 분석 (Cowork 시범 큐레이션, 2026-04-25)
+**출처**: [reports/monthly_digest_2026-04-W3.md](../reports/monthly_digest_2026-04-W3.md) §3 갭 분석 (Cowork 시범 큐레이션, 2026-04-25) + [reports/monthly_digest_2026-04-W4.md](../reports/monthly_digest_2026-04-W4.md) §3 신규 1축 (2026-04-26)
 **규모**: 편집 기획 (개발 태스크 아님, 각 brief 자체는 brief_generator 표준 흐름)
 
-2026-04 W3 SNS 산출물이 **AWS Bedrock × Claude Code 운영 트러블슈팅**에 강하게 편중. 매거진 폭을 위해 SNS에 의존하지 않는 신규 brief 5건을 후보로 등록 (`gap_analysis` 라벨).
+2026-04 W3 SNS 산출물이 **AWS Bedrock × Claude Code 운영 트러블슈팅**에 강하게 편중. 2026-04 W4는 평일 3일 자동화 0건 anomaly 발생. 매거진 폭과 운영 회복력을 위해 SNS에 의존하지 않는 신규 brief 6건을 후보로 등록 (`gap_analysis` 라벨).
 
 ### 신규 brief 후보
 
 | 갭 영역 | 신규 brief 제안 | 비고 |
 |---|---|---|
-| 비개발자 페르소나 | "Cowork로 매거진 SOP를 운영한 한 달" 본인 사례 | 매거진 자체 운영 회고 — Phase 8 closure 후 자연스러움 |
-| 거버넌스·법무 | "AI 기본법 시행 100일, 매체사가 점검할 5가지" | `docs/governance.md` 실전판 |
-| 한국어 편집 품질 | "한국어 매체에서 Claude를 쓰는 편집 가이드 v1" | 편집 표준 문서화 — em-dash·Noto Serif KR 등 |
-| 외부 생태계 비교 | "Claude Code vs. Cursor vs. Replit Agent — 운영자 시점 비교" | 매거진 정체성에 정합 |
-| 도입 ROI·정량 사례 | "Claude Max 구독 1팀 6개월 — API 비용 0원 운영기" | 무료 발행 정책과 직접 정합 (TASK_033) |
+| 비개발자 페르소나 | "Cowork로 매거진 SOP를 운영한 한 달" 본인 사례 | 매거진 자체 운영 회고 — Phase 8 closure 후 자연스러움. **5월 plan_issue 우선 후보** (W3 결정) |
+| 거버넌스·법무 | "AI 기본법 시행 100일, 매체사가 점검할 5가지" | `docs/governance.md` 실전판. 외부 자료 의존 — 6월 적정 |
+| 한국어 편집 품질 | "한국어 매체에서 Claude를 쓰는 편집 가이드 v1" | 편집 표준 문서화 — em-dash·Noto Serif KR 등. 6월 적정 |
+| 외부 생태계 비교 | "Claude Code vs. Cursor vs. Replit Agent — 운영자 시점 비교" | 매거진 정체성에 정합. Cursor·Replit 사용 경험 확보 후 |
+| 도입 ROI·정량 사례 | "Claude Max 구독 1팀 6개월 — API 비용 0원 운영기" | 무료 발행 정책과 직접 정합 (TASK_033). **5월 plan_issue 우선 후보** (W3 결정) |
+| **운영 가시성 — 자매 시스템 SLA (W4 신규)** | **"Cowork·Claude Code 자동화 SLA — 가시성 없는 의존이 매거진 운영을 어떻게 깨는가"** | W4 평일 3일 0건 anomaly 자가 사례. 자매 시스템 의존도가 높은 무료 발행 운영체계의 SPOF 분석. fact-check 부담 적음(자가 사례). **5월 plan_issue 후보 — 자매 시스템 회신 도착 후 데이터 보강** |
 
 ### 언제 착수
 - 2026-05 월간 plan_issue 작성 시 (TASK_036) 편집자가 위 5건 중 N건 선택해 정식 plan 항목화
