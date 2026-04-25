@@ -4,24 +4,31 @@
 **입력**: `SNS運営（Threads）` Drive 폴더 — 평일 5일치 카드뉴스 5덱(32장) + 블로그 17건
 **처리 모드**: 메타데이터 + 링크 참조 (본문 무복사)
 **SOP**: [docs/integrations/sns_to_magazine_pipeline.md](../docs/integrations/sns_to_magazine_pipeline.md)
-**source_registry_status**: `proposed`  <!-- proposed | partial | registered. Gate 1 승인 후 partial, source_registry add 후 registered -->
+**source_registry_status**: `partial`  <!-- proposed | partial | registered. Gate 1 승인 후 partial, source_registry add 후 registered. 2026-04-26: 4 클러스터(A·B·C·E) 15건 registered, Cluster D(autofix-pr-review) hold로 미등록 → partial 유지. -->
 
 ---
 
 ## editor_approval (Gate 1)
 
 ```yaml
-status: pending           # pending | approved | rejected | partial
-reviewer: <편집자 서명>
-reviewed_at: <YYYY-MM-DDTHH:MM+09:00>
+status: partial           # 5 클러스터 중 4 approve, 1 hold
+reviewer: shin.buheon
+reviewed_at: 2026-04-26T01:10+09:00
 notes: |
   - 클러스터별 채택 여부:
-      bedrock-permission-403:        [ ] approve  [ ] reject  [ ] hold
-      bedrock-opus47-endpoint:       [ ] approve  [ ] reject  [ ] hold
-      claude-code-multi-agent:       [ ] approve  [ ] reject  [ ] hold
-      autofix-pr-review:             [ ] approve  [ ] reject  [ ] hold
-      drawio-skill-aws:              [ ] approve  [ ] reject  [ ] hold
-  - 갭 분석 신규 brief 큐 이관: [ ] yes  [ ] no
+      bedrock-permission-403:        [x] approve  [ ] reject  [ ] hold
+      bedrock-opus47-endpoint:       [x] approve  [ ] reject  [ ] hold
+      claude-code-multi-agent:       [x] approve  [ ] reject  [ ] hold
+      autofix-pr-review:             [ ] approve  [ ] reject  [x] hold
+      drawio-skill-aws:              [x] approve  [ ] reject  [ ] hold
+  - 갭 분석 신규 brief 큐 이관: [x] yes  [ ] no
+  - 비고:
+      * Cluster D(autofix-pr-review)는 본편 부적합 → hold, SNS 카드뉴스 재가공만 진행.
+      * 갭 분석 5건 중 "Cowork SOP 운영기"·"Claude Max 6개월 운영기" 2건은
+        5월 plan_issue 우선 후보로 승격 (docs/backlog.md "SNS 디제스트 갭 분석" 섹션 기등록).
+      * approved 클러스터 15건 source_id는 source_registry에 rights_status=free로 등록 완료
+        (article_id=monthly_digest_2026-04-W3, language=ko, publisher=SNS-Threads-Drive).
+      * Cluster C 동일 slug 3회는 발행 단계에서 04-21 정본 채택 + 04-17·20 누적 비교 박스로 처리.
 ```
 
 ---
@@ -172,3 +179,4 @@ Drawio Skill로 AWS 아키텍처를 그리는 사례. 클러스터링 임계 미
 ## 변경 이력
 
 - 2026-04-25: 시범 큐레이션 1회분 초안 (Cowork 자동 생성, 편집자 미승인 상태). 매거진 repo commit 시점에 정합 fix 2건 추가 — `source_registry_status: proposed` 헤더, Gate 2 체크 6번(카드뉴스 매핑 검증).
+- 2026-04-26: Round 2.B Gate 1 결정 — 4 클러스터(A·B·C·E) approve, Cluster D(autofix-pr-review) hold, 갭 분석 5건 중 2건 5월 plan_issue 우선 후보 승격. approved 15건 source_id를 `data/source_registry.db`에 `rights_status=free` / `language=ko` / `article_id=monthly_digest_2026-04-W3`로 등록. 헤더 `source_registry_status: proposed → partial`.
