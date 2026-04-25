@@ -1,10 +1,7 @@
 """
-sop_updater.py — TASK_027 자율 개선 루프 Opus 분석 + 업데이트 제안
+Generate SOP update proposals from weekly failure signals.
 
-Opus 4.7로 반복 실패 패턴을 추출하고 프롬프트/기준 업데이트 제안서를 생성한다.
-실제 파일 수정은 하지 않는다 — git diff 형태의 제안만 반환한다.
-
-사용법:
+Usage:
     python pipeline/sop_updater.py --failures logs/failures.json
     python pipeline/sop_updater.py --failures logs/failures.json --dry-run
 """
@@ -23,7 +20,11 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-if sys.platform == "win32" and not getattr(sys.stdout, "_cm_utf8", False):
+if (
+    sys.platform == "win32"
+    and "pytest" not in sys.modules
+    and not getattr(sys.stdout, "_cm_utf8", False)
+):
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -43,51 +44,46 @@ MAX_TOKENS = 5000
 MAX_RETRIES = 3
 RETRY_WAIT_SECONDS = 15
 
-SYSTEM_PROMPT = """당신은 Claude Magazine 편집 운영 SOP 개선 에이전트다.
+SYSTEM_PROMPT = """You are the Claude Magazine SOP improvement analyst.
 
-입력으로 받는 것: 최근 N일간의 실패 통계 (editorial_lint 실패·편집자 판정·standards 실패·Langfuse 이상 메트릭).
+Input is a weekly failure-and-operations summary JSON. Produce only JSON.
 
-해야 할 일:
-1. 반복 패턴을 3~5개 추출하라 (frequency, affected_categories 포함).
-2. 각 패턴에 대해 수정 대상 파일(prompts/template_*.txt, spec/article_standards.yml, docs/editorial_checklist.md 등)과 git diff 형식의 제안을 만들라.
-3. 절대 파일을 실제로 수정하지 말라 — 제안만 출력하라.
-4. confidence(0~1)는 근거 건수·일관성에 비례해 보수적으로 매겨라.
+Rules:
+1. Extract 3-5 recurring patterns when evidence is strong enough.
+2. Propose updates as diffs or operational decisions.
+3. Do not modify files directly. Suggest changes only.
+4. Be conservative with confidence scores.
+5. Treat cache, citations, illustration, and publish signals as operational inputs:
+   - If they imply a prompt/spec/doc change, propose a normal file diff.
+   - If they imply an operating policy decision, emit `target_file: "operations:<topic>"`.
+   - If the signal is ambiguous, call out that human review is required.
 
-출력은 반드시 JSON 한 개로만 하라. 앞뒤 설명이나 코드 펜스 없이 아래 스키마를 정확히 따라라:
-
+Return this JSON schema only:
 {
   "patterns": [
     {
-      "pattern": "과장된 수치 표현",
-      "frequency": 12,
-      "affected_categories": ["deep_dive", "feature"],
-      "evidence": "최근 7일 editor_corrections에서 exaggeration 8건, 그 중 high 3건"
+      "pattern": "short description",
+      "frequency": 3,
+      "affected_categories": ["weekly_brief"],
+      "evidence": "why this matters"
     }
   ],
   "proposed_updates": [
     {
-      "target_file": "prompts/template_B_draft.txt",
+      "target_file": "docs/editorial_checklist.md",
       "priority": "high",
-      "diff": "--- a/prompts/template_B_draft.txt\\n+++ b/prompts/template_B_draft.txt\\n@@ ... @@\\n 기존 줄\\n+추가 줄\\n",
-      "rationale": "근거 요약",
-      "expected_impact": "예상 개선 효과"
+      "diff": "--- a/file\\n+++ b/file\\n@@ ... @@\\n",
+      "rationale": "why this change is suggested",
+      "expected_impact": "expected effect"
     }
   ],
   "confidence": 0.72,
-  "notes": "사람 리뷰 시 유의사항"
+  "notes": "review notes"
 }
-
-patterns 배열은 0~10개, proposed_updates는 0~10개까지만. 근거가 약하면 빈 배열을 반환하라.
 """
 
 
-# ---------------------------------------------------------------------------
-# 프롬프트 구축
-# ---------------------------------------------------------------------------
-
-
 def _summarize_failures(failures: dict[str, Any], limit_chars: int = 18000) -> str:
-    """Opus에 넘길 실패 요약 문자열. 과도하게 크면 축약."""
     compact: dict[str, Any] = {
         "period": failures.get("period", {}),
         "total_articles": failures.get("total_articles", 0),
@@ -95,36 +91,72 @@ def _summarize_failures(failures: dict[str, Any], limit_chars: int = 18000) -> s
         "standards_failures": failures.get("standards_failures", []),
         "editor_corrections": failures.get("editor_corrections", []),
         "langfuse_anomalies": failures.get("langfuse_anomalies", []),
+        "cache_signals": failures.get("cache_signals", {}),
+        "citations_signals": failures.get("citations_signals", {}),
+        "illustration_signals": failures.get("illustration_signals", {}),
+        "publish_monthly_signals": failures.get("publish_monthly_signals", {}),
     }
-    text = json.dumps(compact, ensure_ascii=False, indent=2)
-    if len(text) <= limit_chars:
-        return text
 
-    # 예시를 깎아 용량 맞춤
     def _trim_examples(items: list[Any], keep: int = 2) -> list[Any]:
-        out = []
-        for entry in items:
-            if isinstance(entry, dict) and "examples" in entry:
-                clipped = dict(entry)
-                clipped["examples"] = entry["examples"][:keep]
-                out.append(clipped)
+        trimmed = []
+        for item in items:
+            if isinstance(item, dict) and "examples" in item:
+                clone = dict(item)
+                clone["examples"] = list(item.get("examples", []))[:keep]
+                trimmed.append(clone)
             else:
-                out.append(entry)
-        return out
+                trimmed.append(item)
+        return trimmed
 
     compact["editorial_lint_failures"] = _trim_examples(compact["editorial_lint_failures"])
-    compact["editor_corrections"] = _trim_examples(compact["editor_corrections"])
     compact["standards_failures"] = _trim_examples(compact["standards_failures"])
+    compact["editor_corrections"] = _trim_examples(compact["editor_corrections"])
+
+    if isinstance(compact["cache_signals"], dict):
+        compact["cache_signals"] = {
+            "pipelines": {
+                name: {
+                    "runs": details.get("runs", 0),
+                    "cache_enabled_runs": details.get("cache_enabled_runs", 0),
+                    "hit_rate_change_7d": details.get("hit_rate_change_7d"),
+                    "anomaly": details.get("anomaly"),
+                }
+                for name, details in (compact["cache_signals"].get("pipelines") or {}).items()
+            }
+        }
+    if isinstance(compact["citations_signals"], dict):
+        compact["citations_signals"] = {
+            "checks_total": compact["citations_signals"].get("checks_total", 0),
+            "by_status": compact["citations_signals"].get("by_status", {}),
+            "top_mismatched_article_ids": list(
+                compact["citations_signals"].get("top_mismatched_article_ids", [])
+            )[:5],
+            "anomaly": compact["citations_signals"].get("anomaly"),
+        }
+    if isinstance(compact["illustration_signals"], dict):
+        compact["illustration_signals"] = {
+            "provider_distribution": compact["illustration_signals"].get("provider_distribution", {}),
+            "fallback_rate": compact["illustration_signals"].get("fallback_rate"),
+            "budget_utilization": compact["illustration_signals"].get("budget_utilization"),
+            "fallback_reasons": compact["illustration_signals"].get("fallback_reasons", {}),
+            "anomaly": compact["illustration_signals"].get("anomaly"),
+        }
+    if isinstance(compact["publish_monthly_signals"], dict):
+        compact["publish_monthly_signals"] = {
+            "recent_runs": list(compact["publish_monthly_signals"].get("recent_runs", []))[:3],
+            "bottleneck_stage": compact["publish_monthly_signals"].get("bottleneck_stage"),
+            "stage_duration_change_7d": compact["publish_monthly_signals"].get("stage_duration_change_7d", {}),
+            "anomaly": compact["publish_monthly_signals"].get("anomaly"),
+        }
+
     text = json.dumps(compact, ensure_ascii=False, indent=2)
     return text[:limit_chars]
 
 
 def _extract_json(raw: str) -> dict[str, Any]:
-    """Opus 응답에서 JSON 블록을 관용적으로 추출."""
     if not raw:
         return {}
     cleaned = raw.strip()
-    # ```json ... ``` 펜스 제거
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned, flags=re.DOTALL)
     if fenced:
         cleaned = fenced.group(1)
@@ -140,10 +172,9 @@ def _extract_json(raw: str) -> dict[str, Any]:
 
 
 def _log_request(request_id: str | None, payload: dict[str, Any]) -> Path:
-    """logs/sop_update_TIMESTAMP.json에 request_id와 요약 저장."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    log_file = LOGS_DIR / f"sop_update_{stamp}.json"
-    log_file.write_text(
+    log_path = LOGS_DIR / f"sop_update_{stamp}.json"
+    log_path.write_text(
         json.dumps(
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -160,12 +191,7 @@ def _log_request(request_id: str | None, payload: dict[str, Any]) -> Path:
         ),
         encoding="utf-8",
     )
-    return log_file
-
-
-# ---------------------------------------------------------------------------
-# 메인 호출
-# ---------------------------------------------------------------------------
+    return log_path
 
 
 def _empty_response(reason: str) -> dict[str, Any]:
@@ -179,22 +205,10 @@ def _empty_response(reason: str) -> dict[str, Any]:
 
 
 def analyze_and_propose(failures: dict[str, Any]) -> dict[str, Any]:
-    """Opus 4.7 호출로 패턴 분석 + 업데이트 제안.
-
-    반환: {
-        "patterns": [...],
-        "proposed_updates": [...],
-        "opus_request_id": str | None,
-        "confidence": float,
-        "notes": str,
-    }
-    """
-    # TASK_033: provider 추상화 (CLAUDE_PROVIDER=sdk면 Max 구독, 추가 비용 0)
-    kind = (os.environ.get("CLAUDE_PROVIDER", "api")).lower()
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if kind == "api" and not api_key:
-        print("[warn] ANTHROPIC_API_KEY 미설정 — Sonnet 호출 skip, 빈 제안 반환", file=sys.stderr)
-        return _empty_response("ANTHROPIC_API_KEY 미설정으로 분석 생략됨")
+    provider_kind = os.environ.get("CLAUDE_PROVIDER", "api").lower()
+    if provider_kind == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
+        print("[warn] ANTHROPIC_API_KEY missing; returning empty proposal", file=sys.stderr)
+        return _empty_response("ANTHROPIC_API_KEY missing")
 
     try:
         try:
@@ -202,139 +216,110 @@ def analyze_and_propose(failures: dict[str, Any]) -> dict[str, Any]:
         except ModuleNotFoundError:
             from claude_provider import get_provider  # type: ignore
     except ImportError:
-        print("[warn] claude_provider import 실패 — skip", file=sys.stderr)
-        return _empty_response("claude_provider 미구현")
+        return _empty_response("claude_provider unavailable")
 
     user_prompt = (
-        "아래는 최근 실패 통계 JSON이다. SYSTEM에 명시한 스키마대로만 응답하라.\n\n"
+        "Below is the weekly failure summary JSON. Follow the system schema strictly.\n\n"
         "=== FAILURES START ===\n"
         f"{_summarize_failures(failures)}\n"
         "=== FAILURES END ==="
     )
 
-    last_error: Exception | None = None
-    result_text = ""
     request_id: str | None = None
+    result_text = ""
     input_tokens = 0
     output_tokens = 0
+    last_error: Exception | None = None
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             provider = get_provider()
-            # MODEL 상수는 tier 문자열 ("sonnet"). 하위 호환: 풀네임이면 자동 추출.
-            tier = "sonnet"
-            if "opus" in MODEL:
-                tier = "opus"
-            elif "haiku" in MODEL:
-                tier = "haiku"
-
             result = provider.stream_complete(
                 system=SYSTEM_PROMPT,
                 user=user_prompt,
-                model_tier=tier,
+                model_tier="sonnet",
                 max_tokens=MAX_TOKENS,
             )
-            result_text = result.text
             request_id = result.request_id
+            result_text = result.text
             input_tokens = result.input_tokens
             output_tokens = result.output_tokens
             break
         except Exception as exc:
             last_error = exc
-            print(
-                f"[warn] 분석 호출 실패 (attempt {attempt}/{MAX_RETRIES}): {type(exc).__name__}: {exc}",
-                file=sys.stderr,
-            )
+            print(f"[warn] analysis call failed ({attempt}/{MAX_RETRIES}): {type(exc).__name__}: {exc}", file=sys.stderr)
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_WAIT_SECONDS)
 
-    if last_error is not None and not result_text:
-        return _empty_response(f"호출 {MAX_RETRIES}회 실패: {type(last_error).__name__}")
+    if not result_text:
+        return _empty_response(f"call failed: {type(last_error).__name__}" if last_error else "no response")
 
     parsed = _extract_json(result_text)
     if not parsed:
-        print("[warn] Opus 응답에서 JSON 파싱 실패 — 빈 제안 반환", file=sys.stderr)
-        _log_request(request_id, {"patterns": [], "proposed_updates": []})
-        return _empty_response("Opus 응답에서 JSON 파싱 실패")
+        _log_request(request_id, {"patterns": [], "proposed_updates": [], "confidence": 0.0})
+        return _empty_response("response was not valid JSON")
 
-    patterns = parsed.get("patterns", []) if isinstance(parsed.get("patterns"), list) else []
-    proposed = (
-        parsed.get("proposed_updates", [])
-        if isinstance(parsed.get("proposed_updates"), list)
-        else []
-    )
-    confidence = parsed.get("confidence")
+    patterns = parsed.get("patterns") if isinstance(parsed.get("patterns"), list) else []
+    proposed_updates = parsed.get("proposed_updates") if isinstance(parsed.get("proposed_updates"), list) else []
     try:
-        confidence = float(confidence) if confidence is not None else 0.0
+        confidence = float(parsed.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
-    notes = parsed.get("notes") or ""
 
-    response = {
+    payload = {
         "patterns": patterns[:10],
-        "proposed_updates": proposed[:10],
+        "proposed_updates": proposed_updates[:10],
         "opus_request_id": request_id,
         "confidence": max(0.0, min(1.0, confidence)),
-        "notes": notes,
+        "notes": parsed.get("notes") or "",
         "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
     }
-
-    log_path = _log_request(request_id, response)
-    print(
-        f"[log] request_id={request_id} -> {log_path.name}",
-        file=sys.stderr,
-    )
-    return response
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
+    log_path = _log_request(request_id, payload)
+    print(f"[log] request_id={request_id} -> {log_path.name}", file=sys.stderr)
+    return payload
 
 
 def _smoke_test() -> None:
-    """API 키 없이도 통과하는 구조 검증."""
     fake_failures = {
-        "period": {"from": "2026-04-15", "to": "2026-04-22", "days": 7},
+        "period": {"from": "2026-04-18", "to": "2026-04-25", "days": 7},
+        "total_articles": 2,
         "editorial_lint_failures": [{"check_id": "ai-disclosure", "count": 3, "examples": []}],
         "standards_failures": [],
         "editor_corrections": [{"type": "exaggeration", "count": 2, "severity_high_count": 1}],
         "langfuse_anomalies": [],
-        "total_articles": 1,
+        "cache_signals": {"pipelines": {"fact_checker": {"runs": 4, "hit_rate_change_7d": -0.2, "anomaly": "degrading"}}},
+        "citations_signals": {"checks_total": 4, "by_status": {"warn-mismatch": 2}, "anomaly": "mismatch_rising"},
+        "illustration_signals": {"fallback_rate": 0.25, "anomaly": "fallback_rising"},
+        "publish_monthly_signals": {"bottleneck_stage": "pdf_compile", "anomaly": "bottleneck_worsening"},
     }
-    # 키가 없어도 graceful fallback
     os.environ.pop("ANTHROPIC_API_KEY", None)
     result = analyze_and_propose(fake_failures)
     assert "patterns" in result and "proposed_updates" in result
     assert result["opus_request_id"] is None
-    print("ok sop_updater 스모크 테스트 통과 (API 키 없이 graceful fallback)")
+    print("ok sop_updater smoke test passed")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="TASK_027 Opus SOP 제안 생성")
-    parser.add_argument("--failures", help="failure_collector JSON 파일 경로")
-    parser.add_argument("--out", help="제안 JSON 저장 경로")
-    parser.add_argument("--dry-run", action="store_true", help="스모크 테스트")
+    parser = argparse.ArgumentParser(description="Generate weekly SOP proposals")
+    parser.add_argument("--failures", help="Path to failure summary JSON")
+    parser.add_argument("--out", help="Write proposal JSON to a file")
+    parser.add_argument("--dry-run", action="store_true", help="Run smoke test")
     args = parser.parse_args()
 
     if args.dry_run:
         _smoke_test()
         return 0
-
     if not args.failures:
-        parser.error("--failures 가 필요합니다 (또는 --dry-run)")
+        parser.error("--failures is required unless --dry-run is used")
 
-    path = Path(args.failures)
-    if not path.exists():
-        parser.error(f"파일 없음: {path}")
-    failures = json.loads(path.read_text(encoding="utf-8"))
-    result = analyze_and_propose(failures)
-    payload = json.dumps(result, ensure_ascii=False, indent=2)
+    payload = json.loads(Path(args.failures).read_text(encoding="utf-8"))
+    result = analyze_and_propose(payload)
+    output = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out:
-        Path(args.out).write_text(payload, encoding="utf-8")
+        Path(args.out).write_text(output, encoding="utf-8")
         print(f"[ok] proposal saved: {args.out}")
     else:
-        print(payload)
+        print(output)
     return 0
 
 

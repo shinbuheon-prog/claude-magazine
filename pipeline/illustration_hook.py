@@ -132,6 +132,13 @@ def _update_monthly_cost_state(provider: str, amount: float | None, timestamp: d
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _log_illustration(
     article_id: str,
     title: str,
@@ -153,8 +160,8 @@ def _log_illustration(
         "model": result.model,
         "license": result.license,
         "cost_estimate": result.cost_estimate,
-        "prompt_path": str(prompt_path.relative_to(ROOT)),
-        "image_path": str(result.image_path.relative_to(ROOT)),
+        "prompt_path": _display_path(prompt_path),
+        "image_path": _display_path(result.image_path),
         "provider_context": provider_context,
         "metadata": result.metadata,
     }

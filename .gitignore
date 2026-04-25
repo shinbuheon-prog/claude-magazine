@@ -22,9 +22,9 @@ output/
 # failure_collector의 원본 JSON만 제외 (PII/민감 정보 포함 가능성).
 reports/*.failures.json
 
-# Pytest 런타임 아티팩트 (TASK_049)
-.tmp_pytest/
-.tmp_pytest_*/
+# Pytest·태스크 런타임 아티팩트 (TASK_049·053)
+.tmp_*/
+.tmp_*.txt
 reports/.tracecov/
 .pytest_cache/
 .coverage
