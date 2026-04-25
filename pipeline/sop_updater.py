@@ -57,6 +57,7 @@ Rules:
    - If they imply a prompt/spec/doc change, propose a normal file diff.
    - If they imply an operating policy decision, emit `target_file: "operations:<topic>"`.
    - If the signal is ambiguous, call out that human review is required.
+6. If repeated failure queue items are present, prioritize them ahead of generic weekly hygiene.
 
 Return this JSON schema only:
 {
@@ -95,6 +96,7 @@ def _summarize_failures(failures: dict[str, Any], limit_chars: int = 18000) -> s
         "citations_signals": failures.get("citations_signals", {}),
         "illustration_signals": failures.get("illustration_signals", {}),
         "publish_monthly_signals": failures.get("publish_monthly_signals", {}),
+        "repeat_failure_queue": failures.get("repeat_failure_queue", []),
     }
 
     def _trim_examples(items: list[Any], keep: int = 2) -> list[Any]:
@@ -148,6 +150,24 @@ def _summarize_failures(failures: dict[str, Any], limit_chars: int = 18000) -> s
             "stage_duration_change_7d": compact["publish_monthly_signals"].get("stage_duration_change_7d", {}),
             "anomaly": compact["publish_monthly_signals"].get("anomaly"),
         }
+    compact["repeat_failure_queue"] = [
+        {
+            "created_at": marker.get("created_at"),
+            "window_days": marker.get("window_days"),
+            "threshold": marker.get("threshold"),
+            "repeats": [
+                {
+                    "class": repeat.get("class"),
+                    "count": repeat.get("count"),
+                    "stages": repeat.get("stages", []),
+                    "first_seen": repeat.get("first_seen"),
+                    "last_seen": repeat.get("last_seen"),
+                }
+                for repeat in marker.get("repeats", [])[:5]
+            ],
+        }
+        for marker in (compact.get("repeat_failure_queue") or [])[:5]
+    ]
 
     text = json.dumps(compact, ensure_ascii=False, indent=2)
     return text[:limit_chars]

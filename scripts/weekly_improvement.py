@@ -41,6 +41,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from pipeline.failure_collector import collect_failures  # noqa: E402
+from pipeline import failure_repeat_detector  # noqa: E402
 from pipeline.sop_updater import analyze_and_propose  # noqa: E402
 
 REPORTS_DIR = ROOT / "reports"
@@ -65,6 +66,23 @@ def _format_change_pp(value: float | None) -> str:
     if not isinstance(value, (int, float)):
         return "n/a"
     return f"{value * 100:+.1f}%p"
+
+
+def load_priority_markers() -> list[dict[str, Any]]:
+    queue_dir = getattr(failure_repeat_detector, "QUEUE_DIR")
+    if not queue_dir.exists():
+        return []
+    markers: list[dict[str, Any]] = []
+    for path in sorted(queue_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError:
+            continue
+        if payload.get("status") != "queued":
+            continue
+        payload["marker_path"] = str(path)
+        markers.append(payload)
+    return markers
 
 
 def _render_summary(failures: dict[str, Any]) -> list[str]:
@@ -107,6 +125,7 @@ def _render_summary(failures: dict[str, Any]) -> list[str]:
     citations = failures.get("citations_signals") or {}
     illustration = failures.get("illustration_signals") or {}
     publish = failures.get("publish_monthly_signals") or {}
+    priority_markers = failures.get("repeat_failure_queue") or []
 
     lines.extend(
         [
@@ -132,6 +151,22 @@ def _render_summary(failures: dict[str, Any]) -> list[str]:
             "",
         ]
     )
+    if priority_markers:
+        lines.extend(
+            [
+                "## Priority Queue (Repeated Failures)",
+                "",
+                f"- queued markers: {len(priority_markers)}",
+            ]
+        )
+        for marker in priority_markers:
+            for repeat in marker.get("repeats", []):
+                lines.append(
+                    f"- `{repeat.get('class')}` count={repeat.get('count')} "
+                    f"stages={', '.join(repeat.get('stages') or []) or 'n/a'} "
+                    f"window={marker.get('window_days')}d"
+                )
+        lines.append("")
     return lines
 
 
@@ -210,6 +245,11 @@ def _render_checklist(proposal: dict[str, Any], failures: dict[str, Any]) -> lis
     lines.append(
         f"- [ ] [OPERATIONS] publish anomaly `{(failures.get('publish_monthly_signals') or {}).get('anomaly', 'insufficient_data')}` reviewed"
     )
+    for marker in failures.get("repeat_failure_queue") or []:
+        for repeat in marker.get("repeats", []):
+            lines.append(
+                f"- [ ] [PRIORITY] repeated failure `{repeat.get('class')}` ({repeat.get('count')}x) triaged"
+            )
     lines.append("")
     return lines
 
@@ -283,7 +323,12 @@ def notify_slack(proposal_count: int, report_path: Path) -> None:
 
 def run(since_days: int, output: Path, dry_run: bool, create_issue: bool) -> int:
     print(f"[info] collecting signals (since_days={since_days})", file=sys.stderr)
+    failure_repeat_detector.REPORTS_DIR = REPORTS_DIR
+    failure_repeat_detector.QUEUE_DIR = REPORTS_DIR / "auto_trigger_queue"
+    failure_repeat_detector.ARCHIVE_DIR = failure_repeat_detector.QUEUE_DIR / "archived"
     failures = collect_failures(since_days=since_days)
+    queued_markers = load_priority_markers()
+    failures["repeat_failure_queue"] = queued_markers
     period = failures.get("period", {})
     period_label = f"{str(period.get('from', ''))[:10]} ~ {str(period.get('to', ''))[:10]}"
 
@@ -315,6 +360,11 @@ def run(since_days: int, output: Path, dry_run: bool, create_issue: bool) -> int
         url = create_github_issue(output, proposal)
         if url:
             print(f"[ok] GitHub issue created: {url}", file=sys.stderr)
+    if not dry_run:
+        for marker in queued_markers:
+            marker_path = marker.get("marker_path")
+            if marker_path:
+                failure_repeat_detector.acknowledge_marker(Path(marker_path))
     return 0
 
 

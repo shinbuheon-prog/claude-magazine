@@ -46,6 +46,11 @@ try:
 except ModuleNotFoundError:
     from failure_playbook import generate_failure_report  # type: ignore
 
+try:
+    from pipeline import failure_repeat_detector
+except ModuleNotFoundError:
+    import failure_repeat_detector  # type: ignore
+
 STAGE_ORDER = [
     "plan_loaded",
     "quality_gate",
@@ -242,6 +247,17 @@ def _write_failure_playbook(month: str, stage: str, error_output: str) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _queue_repeated_failures(month: str) -> Path | None:
+    failure_repeat_detector.REPORTS_DIR = REPORTS_DIR
+    failure_repeat_detector.QUEUE_DIR = REPORTS_DIR / "auto_trigger_queue"
+    failure_repeat_detector.ARCHIVE_DIR = failure_repeat_detector.QUEUE_DIR / "archived"
+    failures = failure_repeat_detector.scan_failures()
+    repeats = failure_repeat_detector.detect_repeats(failures)
+    if not repeats:
+        return None
+    return failure_repeat_detector.write_queue_marker(repeats, detected_at_run=f"publish_monthly:{month}")
 
 
 def _stage_start_message(stage: str, index: int) -> str:
@@ -472,6 +488,12 @@ def main() -> int:
         failure_path = _write_failure_playbook(args.month, "plan_loaded", str(exc))
         print(str(exc), file=sys.stderr)
         print(f"Recovery guide: {failure_path}", file=sys.stderr)
+        try:
+            marker_path = _queue_repeated_failures(args.month)
+            if marker_path:
+                print(f"[warn] repeated failures queued for weekly_improvement: {marker_path}", file=sys.stderr)
+        except Exception as detector_exc:
+            print(f"[warn] failure repeat detector skipped: {type(detector_exc).__name__}: {detector_exc}", file=sys.stderr)
         return 1
 
     stages: list[tuple[str, Callable[..., bool | None]]] = [
@@ -498,6 +520,12 @@ def main() -> int:
             )
             print(f"Stage failed: {stage_name}", file=sys.stderr)
             print(f"Recovery guide: {failure_path}", file=sys.stderr)
+            try:
+                marker_path = _queue_repeated_failures(args.month)
+                if marker_path:
+                    print(f"[warn] repeated failures queued for weekly_improvement: {marker_path}", file=sys.stderr)
+            except Exception as detector_exc:
+                print(f"[warn] failure repeat detector skipped: {type(detector_exc).__name__}: {detector_exc}", file=sys.stderr)
             return 1
         time.sleep(0.01)
 

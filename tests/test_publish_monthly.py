@@ -76,3 +76,48 @@ def test_publish_monthly_from_stage_skips_earlier_stages(tmp_path: Path, monkeyp
     state = json.loads(module._state_path("2026-05").read_text(encoding="utf-8"))
     assert "pdf_compile" in state["telemetry"]
     assert "plan_loaded" not in state["telemetry"]
+
+
+@pytest.mark.integration
+def test_publish_monthly_queues_repeat_failures_without_changing_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_publish_monthly()
+    monkeypatch.setattr(module, "REPORTS_DIR", tmp_path / "reports")
+    monkeypatch.setattr(module, "ISSUES_DIR", tmp_path / "issues")
+    monkeypatch.setattr(module, "LOGS_DIR", tmp_path / "logs")
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "issues").mkdir()
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    (tmp_path / "issues" / "2026-05.yml").write_text(
+        "issue: 2026-05\ntheme: Test\neditor_in_chief: Editor\narticles:\n  - slug: draft-a\n    status: draft\n",
+        encoding="utf-8",
+    )
+    for index in range(3):
+        (tmp_path / "reports" / f"failure_2026-0{index + 2}_quality_gate.md").write_text(
+            "\n".join(
+                [
+                    "# Publish Failure Recovery Guide",
+                    "",
+                    f"- Month: 2026-0{index + 2}",
+                    "- Failed stage: quality_gate",
+                    f"- Failure time: 2026-04-2{index}T10:00:00+00:00",
+                    "- Matched class: article_status_not_approved",
+                    "",
+                    "## Error Output",
+                    "",
+                    "```text",
+                    "status=draft",
+                    "```",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(sys, "argv", ["publish_monthly.py", "--month", "2026-05"])
+    assert module.main() == 1
+    queue_dir = tmp_path / "reports" / "auto_trigger_queue"
+    markers = list(queue_dir.glob("*.json"))
+    assert len(markers) == 1
+    payload = json.loads(markers[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "queued"
+    assert payload["repeats"][0]["class"] == "article_status_not_approved"
