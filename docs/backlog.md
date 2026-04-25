@@ -32,19 +32,43 @@ def month_total(month: str | None = None) -> dict: ...
 
 ---
 
-## CI 예산 감시 Job
+## CI 예산 감시 — `scripts/audit_budget.py` (부분 완료, 2026-04-25)
 
 **출처**: [BerriAI/litellm](https://github.com/BerriAI/litellm) 시너지 분석 연장
-**규모**: 작음 (~30분), TASK_052 머지 후 진행
+**상태**: ⚠️ **CLI 도구 완료, CI 통합은 후속**
 
-TASK_052 CI에 6 job 분할됨. 후속 태스크 후보:
-- `budget-audit` job 추가 — 월간 누적 비용이 임계 초과 시 CI 실패
-- 임계: `CLAUDE_MAGAZINE_ILLUSTRATION_MONTHLY_USD_CAP` + LLM 자체 상한 합계
-- 초과 시 Slack 알림 (TASK_028 알림 채널 재사용)
+### 완료 (2026-04-25, Round 3 직접 구현)
+- `scripts/audit_budget.py` CLI 신설
+  - `data/illustration_cost_<YYYY-MM>.json` 읽어 cap 대비 utilization 산출
+  - `CLAUDE_MAGAZINE_ILLUSTRATION_MONTHLY_USD_CAP` env 또는 `--cap` override
+  - 모드: 텍스트·JSON·`--strict`(초과 시 exit 1)·`--notify`(80% 이상 Slack)
+  - `--month` 지정 가능 (기본 이번 달 UTC)
+- `tests/test_audit_budget.py` — 16 tests, 충분한 커버리지
 
-### 언제 착수
-- TASK_052 머지 완료
-- cost_tracker 중앙화(위 항목)가 있으면 집계가 깔끔
+### 후속 (남은 부분)
+- LLM cost(`logs/factcheck_*.json` cache cost) 추가 추적 — 현재는 illustration만
+- CI ci.yml에 `budget-audit` job 추가 — 단, `data/`는 gitignore라 CI 실데이터 부재.
+  대안: artifact upload from publish_monthly 또는 Slack 알림만 운영 인프라로
+- cost_tracker 중앙화(아래 항목)와 통합 — illustration·LLM·citations 단일 진입점
+
+### 언제 추가 작업 착수
+- 운영 데이터 2~4주 축적 후 LLM cost 통합
+- publish_monthly 실전 가동 시 artifact 흐름 설계
+
+### 운영 사용 예시
+```bash
+# 이번 달 현황 (텍스트)
+python scripts/audit_budget.py
+
+# JSON 출력 (자동화 통합용)
+python scripts/audit_budget.py --json
+
+# CI/cron 모드 — cap 초과 시 exit 1 + Slack 알림
+python scripts/audit_budget.py --strict --notify
+
+# 특정 달 임시 점검
+python scripts/audit_budget.py --month 2026-05 --cap 5.0
+```
 
 ---
 
