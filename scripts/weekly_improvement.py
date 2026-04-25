@@ -1,13 +1,7 @@
 """
-weekly_improvement.py — TASK_027 자율 개선 루프 진입점
+Entry point for the weekly improvement loop.
 
-매주 일요일 23:00 KST에 Cron 실행되어:
-  1) failure_collector.collect_failures(since_days) 호출
-  2) sop_updater.analyze_and_propose(failures) 호출 (--dry-run이면 skip)
-  3) reports/improvement_YYYY-MM-DD.md 저장 (토요일 기준 날짜)
-  4) (옵션) GitHub Issue 자동 생성 --create-issue
-
-사용법:
+Usage:
     python scripts/weekly_improvement.py
     python scripts/weekly_improvement.py --since-days 14
     python scripts/weekly_improvement.py --dry-run
@@ -28,7 +22,11 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-if sys.platform == "win32" and not getattr(sys.stdout, "_cm_utf8", False):
+if (
+    sys.platform == "win32"
+    and "pytest" not in sys.modules
+    and not getattr(sys.stdout, "_cm_utf8", False)
+):
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -43,6 +41,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from pipeline.failure_collector import collect_failures  # noqa: E402
+from pipeline import failure_repeat_detector  # noqa: E402
 from pipeline.sop_updater import analyze_and_propose  # noqa: E402
 
 REPORTS_DIR = ROOT / "reports"
@@ -53,27 +52,37 @@ LOGS_DIR.mkdir(exist_ok=True)
 PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-# ---------------------------------------------------------------------------
-# 보고서 파일명 (토요일 기준)
-# ---------------------------------------------------------------------------
-
-
 def _saturday_of(now: datetime | None = None) -> datetime:
-    """주어진 시각(기본 KST 현재) 이전의 가장 가까운 토요일."""
     base = now or datetime.now(timezone.utc)
-    # 토요일 = weekday 5 (월=0 .. 일=6)
     delta = (base.weekday() - 5) % 7
     return (base - timedelta(days=delta)).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def default_report_path() -> Path:
-    sat = _saturday_of()
-    return REPORTS_DIR / f"improvement_{sat.strftime('%Y-%m-%d')}.md"
+    return REPORTS_DIR / f"improvement_{_saturday_of().strftime('%Y-%m-%d')}.md"
 
 
-# ---------------------------------------------------------------------------
-# 보고서 렌더링 (마크다운)
-# ---------------------------------------------------------------------------
+def _format_change_pp(value: float | None) -> str:
+    if not isinstance(value, (int, float)):
+        return "n/a"
+    return f"{value * 100:+.1f}%p"
+
+
+def load_priority_markers() -> list[dict[str, Any]]:
+    queue_dir = getattr(failure_repeat_detector, "QUEUE_DIR")
+    if not queue_dir.exists():
+        return []
+    markers: list[dict[str, Any]] = []
+    for path in sorted(queue_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError:
+            continue
+        if payload.get("status") != "queued":
+            continue
+        payload["marker_path"] = str(path)
+        markers.append(payload)
+    return markers
 
 
 def _render_summary(failures: dict[str, Any]) -> list[str]:
@@ -83,215 +92,245 @@ def _render_summary(failures: dict[str, Any]) -> list[str]:
     standards = failures.get("standards_failures", [])
 
     lint_total = sum(item.get("count", 0) for item in lint)
-    corr_total = sum(item.get("count", 0) for item in corrections)
+    correction_total = sum(item.get("count", 0) for item in corrections)
     standards_total = sum(item.get("count", 0) for item in standards)
 
     def _top3(items: list[dict[str, Any]], key: str) -> str:
         if not items:
-            return "없음"
-        parts = [f"{item[key]} {item.get('count', 0)}건" for item in items[:3]]
-        return ", ".join(parts)
+            return "none"
+        return ", ".join(f"{item.get(key)} {item.get('count', 0)}x" for item in items[:3])
 
-    lines = ["## 요약", ""]
-    lines.append(f"- 수집 기간: {failures.get('period', {}).get('from', '')} ~ "
-                 f"{failures.get('period', {}).get('to', '')} "
-                 f"({failures.get('period', {}).get('days', 0)}일)")
-    lines.append(f"- 발행 기사: {failures.get('total_articles', 0)}건")
-    lines.append(
-        f"- editorial_lint 실패: {lint_total}건 (주요: {_top3(lint, 'check_id')})"
-    )
-    lines.append(
-        f"- standards_checker 실패: {standards_total}건 (주요: {_top3(standards, 'rule_id')})"
-    )
-    lines.append(
-        f"- 편집자 판정: {corr_total}건 (주요: {_top3(corrections, 'type')})"
-    )
+    lines = [
+        "## Summary",
+        "",
+        f"- Period: {failures.get('period', {}).get('from', '')} ~ {failures.get('period', {}).get('to', '')}",
+        f"- Published articles: {failures.get('total_articles', 0)}",
+        f"- editorial_lint failures: {lint_total} ({_top3(lint, 'check_id')})",
+        f"- standards failures: {standards_total} ({_top3(standards, 'rule_id')})",
+        f"- editor corrections: {correction_total} ({_top3(corrections, 'type')})",
+    ]
     if anomalies:
-        anomaly_desc = "; ".join(
-            f"{a.get('metric')}: {a.get('baseline')} -> {a.get('current')} ({a.get('delta_pct')}%)"
-            for a in anomalies
+        lines.append(
+            "- Langfuse anomalies: "
+            + "; ".join(
+                f"{item.get('metric')}: {item.get('baseline')} -> {item.get('current')} ({item.get('delta_pct')}%)"
+                for item in anomalies
+            )
         )
-        lines.append(f"- 비정상 메트릭: {anomaly_desc}")
     else:
-        lines.append("- 비정상 메트릭: 없음")
+        lines.append("- Langfuse anomalies: none")
     lines.append("")
+
+    cache_fact = ((failures.get("cache_signals") or {}).get("pipelines") or {}).get("fact_checker", {})
+    citations = failures.get("citations_signals") or {}
+    illustration = failures.get("illustration_signals") or {}
+    publish = failures.get("publish_monthly_signals") or {}
+    priority_markers = failures.get("repeat_failure_queue") or []
+
+    lines.extend(
+        [
+            "## Operational Signals (TASK_053)",
+            "",
+            "### Cache",
+            f"- fact_checker runs={cache_fact.get('runs', 0)} cache_enabled={cache_fact.get('cache_enabled_runs', 0)} "
+            f"change_7d={_format_change_pp(cache_fact.get('hit_rate_change_7d'))} anomaly={cache_fact.get('anomaly', 'insufficient_data')}",
+            "",
+            "### Citations",
+            f"- checks={citations.get('checks_total', 0)} by_status={citations.get('by_status', {})} "
+            f"anomaly={citations.get('anomaly', 'insufficient_data')}",
+            "",
+            "### Illustration",
+            f"- provider_distribution={illustration.get('provider_distribution', {})}",
+            f"- fallback_rate={illustration.get('fallback_rate', 0)} budget_utilization={illustration.get('budget_utilization', 0)} "
+            f"anomaly={illustration.get('anomaly', 'insufficient_data')}",
+            "",
+            "### Publish Monthly",
+            f"- bottleneck_stage={publish.get('bottleneck_stage') or 'n/a'} "
+            f"change={publish.get('stage_duration_change_7d', {})} "
+            f"anomaly={publish.get('anomaly', 'insufficient_data')}",
+            "",
+        ]
+    )
+    if priority_markers:
+        lines.extend(
+            [
+                "## Priority Queue (Repeated Failures)",
+                "",
+                f"- queued markers: {len(priority_markers)}",
+            ]
+        )
+        for marker in priority_markers:
+            for repeat in marker.get("repeats", []):
+                lines.append(
+                    f"- `{repeat.get('class')}` count={repeat.get('count')} "
+                    f"stages={', '.join(repeat.get('stages') or []) or 'n/a'} "
+                    f"window={marker.get('window_days')}d"
+                )
+        lines.append("")
     return lines
 
 
 def _render_patterns(proposal: dict[str, Any]) -> list[str]:
     patterns = proposal.get("patterns", [])
-    lines = [f"## 반복 패턴 {len(patterns)}건 발견", ""]
+    lines = [f"## Recurring Patterns ({len(patterns)})", ""]
     if not patterns:
-        lines.append("_충분한 반복 패턴이 탐지되지 않았습니다._")
-        lines.append("")
-        return lines
-    for idx, pattern in enumerate(patterns, start=1):
-        name = pattern.get("pattern", "(no name)")
-        freq = pattern.get("frequency", 0)
-        categories = pattern.get("affected_categories") or []
-        evidence = pattern.get("evidence", "")
-        cats = ", ".join(categories) if categories else "n/a"
-        lines.append(f"### {idx}. {name} (빈도 {freq}, 영향 카테고리: {cats})")
-        if evidence:
-            lines.append(f"- 근거: {evidence}")
+        return lines + ["_No strong recurring pattern was detected._", ""]
+
+    for index, pattern in enumerate(patterns, start=1):
+        categories = ", ".join(pattern.get("affected_categories") or []) or "n/a"
+        lines.append(
+            f"### {index}. {pattern.get('pattern', '(unnamed)')} "
+            f"(frequency={pattern.get('frequency', 0)}, categories={categories})"
+        )
+        if pattern.get("evidence"):
+            lines.append(f"- Evidence: {pattern['evidence']}")
         lines.append("")
     return lines
 
 
 def _render_updates(proposal: dict[str, Any]) -> list[str]:
     updates = proposal.get("proposed_updates", [])
-    updates_sorted = sorted(
-        updates, key=lambda u: PRIORITY_ORDER.get(str(u.get("priority") or "medium"), 1)
-    )
-    lines = [f"## 제안된 업데이트 {len(updates_sorted)}건", ""]
-    if not updates_sorted:
-        lines.append("_이번 주 제안된 변경 사항은 없습니다._")
-        lines.append("")
-        return lines
-
-    for update in updates_sorted:
-        target = update.get("target_file", "(unspecified)")
-        priority = str(update.get("priority") or "medium").upper()
-        rationale = update.get("rationale", "")
-        impact = update.get("expected_impact", "")
-        diff = update.get("diff", "")
-        lines.append(f"### [{priority}] {target}")
-        if impact:
-            lines.append(f"기대 효과: {impact}")
-        if rationale:
-            lines.append(f"근거: {rationale}")
-        lines.append("")
-        if diff:
-            lines.append("```diff")
-            lines.append(diff.rstrip("\n"))
-            lines.append("```")
-        else:
-            lines.append("_diff 미제공 — 사람이 수동으로 초안 작성 필요._")
-        lines.append("")
-    return lines
-
-
-def _render_checklist(proposal: dict[str, Any]) -> list[str]:
-    updates = proposal.get("proposed_updates", [])
-    lines = ["## 사람 승인 필요 체크리스트", ""]
+    updates = sorted(updates, key=lambda item: PRIORITY_ORDER.get(str(item.get("priority") or "medium"), 1))
+    lines = [f"## Proposed Updates ({len(updates)})", ""]
     if not updates:
-        lines.append("- [ ] 이번 주 수정 제안 없음 — 실패 수집 로그만 확인")
-        lines.append("")
-        return lines
-    lines.append("아래 절차로 제안을 검토/적용하십시오:")
-    lines.append("")
-    lines.append("1. `git checkout -b improvement/$(date +%Y-%m-%d)`")
-    lines.append("2. 제안된 diff를 수동 적용 (또는 `git apply <diff-file>`)")
-    lines.append("3. 로컬에서 관련 스모크 테스트 재실행")
-    lines.append("4. `git commit -m \"chore: weekly SOP update\"` + PR 생성")
-    lines.append("")
-    lines.append("제안별 승인 체크:")
+        return lines + ["_No concrete update was proposed._", ""]
+
     for update in updates:
         target = update.get("target_file", "(unspecified)")
         priority = str(update.get("priority") or "medium").upper()
-        lines.append(f"- [ ] [{priority}] `{target}` 리뷰/적용")
+        lines.append(f"### [{priority}] {target}")
+        if update.get("expected_impact"):
+            lines.append(f"Expected impact: {update['expected_impact']}")
+        if update.get("rationale"):
+            lines.append(f"Rationale: {update['rationale']}")
+        lines.append("")
+        if update.get("diff"):
+            lines.append("```diff")
+            lines.append(str(update["diff"]).rstrip("\n"))
+            lines.append("```")
+        else:
+            lines.append("_No diff attached. Manual drafting required._")
+        lines.append("")
+    return lines
+
+
+def _render_checklist(proposal: dict[str, Any], failures: dict[str, Any]) -> list[str]:
+    updates = proposal.get("proposed_updates", [])
+    lines = ["## Review Checklist", ""]
+    lines.append("1. Create a branch for the weekly improvement changes.")
+    lines.append("2. Review suggested diffs and operational decisions.")
+    lines.append("3. Run the smallest relevant tests locally.")
+    lines.append('4. Commit with `chore: weekly SOP update` after human review.')
+    lines.append("")
+
+    if updates:
+        lines.append("Suggested updates:")
+        for update in updates:
+            target = update.get("target_file", "(unspecified)")
+            priority = str(update.get("priority") or "medium").upper()
+            lines.append(f"- [ ] [{priority}] `{target}` reviewed")
+    else:
+        lines.append("- [ ] No code/doc diff proposed this week")
+    lines.append("")
+    lines.append("Operational follow-ups:")
+    lines.append(
+        f"- [ ] [OPERATIONS] cache anomaly `{((failures.get('cache_signals') or {}).get('pipelines') or {}).get('fact_checker', {}).get('anomaly', 'insufficient_data')}` reviewed"
+    )
+    lines.append(
+        f"- [ ] [OPERATIONS] citations anomaly `{(failures.get('citations_signals') or {}).get('anomaly', 'insufficient_data')}` reviewed"
+    )
+    lines.append(
+        f"- [ ] [OPERATIONS] illustration anomaly `{(failures.get('illustration_signals') or {}).get('anomaly', 'insufficient_data')}` reviewed"
+    )
+    lines.append(
+        f"- [ ] [OPERATIONS] publish anomaly `{(failures.get('publish_monthly_signals') or {}).get('anomaly', 'insufficient_data')}` reviewed"
+    )
+    for marker in failures.get("repeat_failure_queue") or []:
+        for repeat in marker.get("repeats", []):
+            lines.append(
+                f"- [ ] [PRIORITY] repeated failure `{repeat.get('class')}` ({repeat.get('count')}x) triaged"
+            )
     lines.append("")
     return lines
 
 
-def render_report(
-    failures: dict[str, Any],
-    proposal: dict[str, Any],
-    period_label: str,
-) -> str:
-    lines: list[str] = [f"# 주간 개선 제안 — {period_label}", ""]
+def render_report(failures: dict[str, Any], proposal: dict[str, Any], period_label: str) -> str:
+    lines: list[str] = [f"# Weekly Improvement Proposal - {period_label}", ""]
     lines.extend(_render_summary(failures))
     lines.extend(_render_patterns(proposal))
     lines.extend(_render_updates(proposal))
-    lines.extend(_render_checklist(proposal))
+    lines.extend(_render_checklist(proposal, failures))
 
-    confidence = proposal.get("confidence")
-    request_id = proposal.get("opus_request_id")
-    lines.append("## 메타")
-    lines.append("")
-    lines.append(f"- 생성 시각: {datetime.now(timezone.utc).isoformat()}")
-    lines.append(
-        f"- Opus request_id: `{request_id}`" if request_id else "- Opus request_id: _n/a (dry-run 또는 호출 실패)_"
+    lines.extend(
+        [
+            "## Meta",
+            "",
+            f"- Generated at: {datetime.now(timezone.utc).isoformat()}",
+            f"- Opus request_id: `{proposal.get('opus_request_id')}`" if proposal.get("opus_request_id") else "- Opus request_id: _n/a_",
+            f"- confidence: {proposal.get('confidence')}" if proposal.get("confidence") is not None else "- confidence: n/a",
+        ]
     )
-    if confidence is not None:
-        lines.append(f"- confidence: {confidence}")
     if proposal.get("notes"):
         lines.append(f"- notes: {proposal['notes']}")
-    lines.append("")
-    lines.append(
-        "_본 보고서는 Opus 제안일 뿐이며, 실제 파일 수정은 편집자의 수동 승인 후에만 적용됩니다._"
+    lines.extend(
+        [
+            "",
+            "_This report is advisory only. Apply changes after human review._",
+            "",
+        ]
     )
-    lines.append("")
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# 부가 기능: GitHub Issue 생성 / Slack 알림
-# ---------------------------------------------------------------------------
-
-
 def create_github_issue(report_path: Path, proposal: dict[str, Any]) -> str | None:
-    """gh CLI가 있으면 issue를 생성하고 URL을 반환."""
     try:
         subprocess.run(["gh", "--version"], check=True, capture_output=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("[warn] gh CLI 없음 — Issue 생성 skip", file=sys.stderr)
+        print("[warn] gh CLI unavailable; skipping issue creation", file=sys.stderr)
         return None
 
-    title = f"주간 개선 제안 ({report_path.stem})"
+    title = f"Weekly improvement proposal ({report_path.stem})"
     body = report_path.read_text(encoding="utf-8")
     try:
-        result = subprocess.run(
+        completed = subprocess.run(
             ["gh", "issue", "create", "--title", title, "--body", body],
             cwd=ROOT,
             check=True,
             capture_output=True,
             text=True,
         )
-        return result.stdout.strip()
     except subprocess.CalledProcessError as exc:  # pragma: no cover
-        print(f"[warn] gh issue create 실패: {exc.stderr}", file=sys.stderr)
+        print(f"[warn] gh issue create failed: {exc.stderr}", file=sys.stderr)
         return None
+    return completed.stdout.strip()
 
 
 def notify_slack(proposal_count: int, report_path: Path) -> None:
-    """NOTIFY_SLACK_WEBHOOK이 있으면 Slack에 간단 알림. 없으면 skip."""
-    url = os.environ.get("NOTIFY_SLACK_WEBHOOK")
-    if not url:
+    webhook = os.environ.get("NOTIFY_SLACK_WEBHOOK")
+    if not webhook:
         return
     try:
         import requests
 
         requests.post(
-            url,
-            json={
-                "text": (
-                    f"주간 개선 제안 {proposal_count}건 대기 중 -> "
-                    f"{report_path.name}"
-                )
-            },
+            webhook,
+            json={"text": f"weekly_improvement generated {proposal_count} proposals -> {report_path.name}"},
             timeout=10,
         )
     except Exception as exc:  # pragma: no cover
-        print(f"[warn] Slack 알림 실패: {exc}", file=sys.stderr)
+        print(f"[warn] Slack notify failed: {exc}", file=sys.stderr)
 
 
-# ---------------------------------------------------------------------------
-# 메인
-# ---------------------------------------------------------------------------
-
-
-def run(
-    since_days: int,
-    output: Path,
-    dry_run: bool,
-    create_issue: bool,
-) -> int:
-    print(f"[info] 실패 수집 시작 (since_days={since_days})", file=sys.stderr)
+def run(since_days: int, output: Path, dry_run: bool, create_issue: bool) -> int:
+    print(f"[info] collecting signals (since_days={since_days})", file=sys.stderr)
+    failure_repeat_detector.REPORTS_DIR = REPORTS_DIR
+    failure_repeat_detector.QUEUE_DIR = REPORTS_DIR / "auto_trigger_queue"
+    failure_repeat_detector.ARCHIVE_DIR = failure_repeat_detector.QUEUE_DIR / "archived"
     failures = collect_failures(since_days=since_days)
-
+    queued_markers = load_priority_markers()
+    failures["repeat_failure_queue"] = queued_markers
     period = failures.get("period", {})
-    period_label = f"{period.get('from', '')[:10]} ~ {period.get('to', '')[:10]}"
+    period_label = f"{str(period.get('from', ''))[:10]} ~ {str(period.get('to', ''))[:10]}"
 
     if dry_run:
         proposal: dict[str, Any] = {
@@ -299,45 +338,42 @@ def run(
             "proposed_updates": [],
             "opus_request_id": None,
             "confidence": 0.0,
-            "notes": "dry-run: Opus 호출 생략",
+            "notes": "dry-run: proposal generation skipped",
         }
-        print("[info] --dry-run: Opus 호출 생략", file=sys.stderr)
     else:
-        print("[info] Opus 4.7 분석 시작", file=sys.stderr)
+        print("[info] generating proposal", file=sys.stderr)
         proposal = analyze_and_propose(failures)
 
     report_md = render_report(failures, proposal, period_label)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(report_md, encoding="utf-8")
-
-    # 보조 산출물: 실패 수집 원본 JSON
-    raw_path = output.with_suffix(".failures.json")
-    raw_path.write_text(json.dumps(failures, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    output.with_suffix(".failures.json").write_text(
+        json.dumps(failures, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
 
     proposal_count = len(proposal.get("proposed_updates", []))
-    print(
-        f"[ok] report -> {output}  (제안 {proposal_count}건, dry_run={dry_run})",
-        file=sys.stderr,
-    )
+    print(f"[ok] report -> {output} (proposals={proposal_count}, dry_run={dry_run})", file=sys.stderr)
 
     notify_slack(proposal_count, output)
     if create_issue and not dry_run and proposal_count > 0:
         url = create_github_issue(output, proposal)
         if url:
-            print(f"[ok] GitHub Issue 생성: {url}", file=sys.stderr)
-
+            print(f"[ok] GitHub issue created: {url}", file=sys.stderr)
+    if not dry_run:
+        for marker in queued_markers:
+            marker_path = marker.get("marker_path")
+            if marker_path:
+                failure_repeat_detector.acknowledge_marker(Path(marker_path))
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="TASK_027 주간 자율 개선 루프")
-    parser.add_argument("--since-days", type=int, default=7, help="최근 N일 실패 수집 (기본 7)")
-    parser.add_argument(
-        "--output",
-        help="보고서 출력 경로 (기본 reports/improvement_YYYY-MM-DD.md)",
-    )
-    parser.add_argument("--dry-run", action="store_true", help="Opus 호출 없이 수집+포맷만")
-    parser.add_argument("--create-issue", action="store_true", help="gh CLI로 GitHub Issue 자동 생성")
+    parser = argparse.ArgumentParser(description="Run the weekly improvement loop")
+    parser.add_argument("--since-days", type=int, default=7, help="Look back N days")
+    parser.add_argument("--output", help="Write the report to a specific path")
+    parser.add_argument("--dry-run", action="store_true", help="Skip model analysis and render a dry-run report")
+    parser.add_argument("--create-issue", action="store_true", help="Create a GitHub issue with gh CLI")
     args = parser.parse_args()
 
     output = Path(args.output) if args.output else default_report_path()
