@@ -224,7 +224,32 @@ def write_queue_marker(repeats: list[dict[str, Any]], detected_at_run: str | Non
         "status": "queued",
     }
     marker_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    notify_slack(repeats, marker_path)
     return marker_path
+
+
+def notify_slack(repeats: list[dict[str, Any]], marker_path: Path) -> None:
+    """반복 실패 큐 마커 작성 시 Slack으로 실시간 알림.
+    NOTIFY_SLACK_WEBHOOK 미설정 시 무음 skip. 실패해도 큐 마커 작성에 영향 없음."""
+    webhook = os.environ.get("NOTIFY_SLACK_WEBHOOK")
+    if not webhook:
+        return
+    try:
+        import requests
+    except ImportError:
+        return
+
+    summary = ", ".join(
+        f"{r.get('class')}({r.get('count')})" for r in repeats[:5]
+    )
+    text = (
+        f"⚠️ Repeated failures detected: {len(repeats)} class(es) — {summary} "
+        f"→ {marker_path.name}"
+    )
+    try:
+        requests.post(webhook, json={"text": text}, timeout=10)
+    except Exception as exc:  # pragma: no cover
+        print(f"[warn] Slack notify failed: {exc}", file=sys.stderr)
 
 
 def acknowledge_marker(marker_path: Path) -> None:

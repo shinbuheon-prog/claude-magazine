@@ -146,6 +146,54 @@ mckinsey-pptx는 40 슬라이드 템플릿 중 차트(heatmap·2×2 matrix·bubb
 
 ---
 
+## editor_corrections 기반 editorial_lint heuristic 자동 학습 (Phase 8 잔여)
+
+**출처**: TASK_054 후속 후보 (편집자가 Phase 8 closure 시 백로그로 이동, 2026-04-25)
+**규모**: 큼 (~120~180분)
+
+TASK_026 편집자 판정 누적(`data/editor_corrections.db`)을 입력으로 editorial_lint heuristic 자동 보강 제안서 생성.
+
+### 아이디어
+`pipeline/lint_heuristic_learner.py` 신규:
+- editor_corrections.db 스캔 → "편집자가 lint False Positive로 판정한 케이스" 추출
+- Sonnet 호출로 heuristic 보강 제안서 생성
+- `reports/lint_heuristic_proposal_*.md` 형태로 저장 — **자동 적용 금지**, 편집자 검토 필수
+
+### 왜 백로그에 머무는가
+- editor_corrections.db에 충분한 데이터 축적이 선행되어야 함 (수개월 단위)
+- TASK_027 sop_updater와 역할 분리·중복 검토 필요
+- 자동 학습 잘못되면 체크 기준 왜곡 → 안전장치 설계 비중이 높음
+
+### 언제 착수
+- editor_corrections에 100건+ 데이터 축적 후
+- TASK_055로 승격 시 안전장치(승인 워크플로우) 명세 우선
+
+---
+
+## weekly_improvement --auto-trigger 옵트인 모드 (Phase 8 잔여)
+
+**출처**: TASK_054 후속 후보 (Phase 8 closure 시 백로그로 이동, 2026-04-25)
+**규모**: 중간 (~60~90분)
+
+TASK_054의 `--trigger-improvement`는 수동 confirmation prompt. 신뢰가 쌓이면 자동 실행도 옵션으로 제공.
+
+### 아이디어
+- env: `CLAUDE_MAGAZINE_AUTO_TRIGGER_IMPROVEMENT=true` (기본 false)
+- 활성 시 큐 마커 작성 즉시 weekly_improvement 자동 호출
+- Debounce: 같은 class에 24h 내 1회만 자동 실행
+- 자동 실행 로그 + Slack 알림 (TASK_054에서 추가된 notify_slack 재사용)
+
+### 왜 백로그에 머무는가
+- false positive 1건당 Opus 호출 비용 발생
+- 매거진 운영 데이터 축적·실전 발행 경험 후 신뢰도 판단 필요
+- TASK_054의 수동 트리거가 충분히 작동하는지 먼저 검증
+
+### 언제 착수
+- TASK_054 머지 후 4주+ 운영 데이터로 false positive 비율 측정
+- 비율이 낮고 수동 트리거가 번거로우면 승격
+
+---
+
 ## Archived Notes
 
 ### publish_monthly UX
