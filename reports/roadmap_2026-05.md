@@ -41,7 +41,17 @@
 |---|---|---|
 | 운영 가시성 (W4 신규) | "Cowork·Claude Code 자동화 SLA — 가시성 없는 의존이 매거진 운영을 어떻게 깨는가" | W4 backlog 등록. 자매 시스템 회신 도착 후 데이터 보강 |
 
-**5월 호 발행 분량 후보**: A(4) + B(2) + C(1) = **7건**. 80페이지 매거진은 통상 5~7개 본 기사 적합. 1차 plan_issue에서 편집자가 우선순위 컷 + Cluster D(autofix-pr-review)는 SNS 카드뉴스로만 재가공.
+### D. Korea Spotlight — 자체 콘텐츠 (Classmethod Korea Tech Blog) 1코너
+
+| 영역 | 코너 | 출처 |
+|---|---|---|
+| Review (3p) | "Korea Spotlight — Classmethod Korea 4월 베스트 기고 TOP 3" | [reports/classmethodkr_best_2026-04.md](classmethodkr_best_2026-04.md) (4월 시범 큐레이션 완료) |
+
+→ 자체 콘텐츠 → 인용 한도 자유 + 블로그 트래픽 유입 효과. 편집장 자가 기고 포함 시 명시 표기 의무.
+
+**5월 호 발행 분량 후보**: A(4) + B(2) + C(1) + D(1) = **8건**. 80페이지 매거진은 통상 5~7개 본 기사 적합. 1차 plan_issue에서 편집자가 우선순위 컷 + Cluster D(autofix-pr-review)는 SNS 카드뉴스로만 재가공.
+
+**80p 도달 전략**: [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) §10 5월 호 시뮬레이션 — classmethodkr Korea Spotlight 3p + mckinsey-pptx 자동 인포그래픽 9p + ai-daily-digest 외부 디제스트 7p 결합 시 **70p 도달**. 추가 보강(Interview 자가 인터뷰 +5p, KPI dashboard +3p, Editorial 확장 +2p)으로 80p 정확 도달 가능.
 
 ---
 
@@ -191,3 +201,4 @@
 ## 변경 이력
 
 - 2026-04-26: 초안 작성. v0.2.1 closure 직후, Round 2.B Gate 1 + Round 2.D Gate 1 결과를 받아 5월말 정식 발행 1호 4주 로드맵으로 정리. 사용자 명시 요구: "마지막 3·4주차에는 고도화로 퀄리티 개선". 콘텐츠 후보 7건(SNS 디제스트 4 + 갭 분석 자가 사례 2 + W4 anomaly 자가 사례 1).
+- 2026-04-26: D 그룹 (Korea Spotlight) 1코너 추가 — 콘텐츠 후보 7건 → **8건**. classmethodkr 기술블로그 자체 콘텐츠 활용. [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) 외부 큐레이션 파이프라인 5계층 설계 동시 작성. 5월 호 도달 분량 시뮬레이션 67p → **70p**.

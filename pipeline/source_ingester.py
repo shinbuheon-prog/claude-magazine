@@ -516,7 +516,7 @@ def ingest_feeds(
                     url=entry_url,
                     publisher=name,
                     content_preview=preview,
-                    rights_status="unknown",
+                    rights_status=feed_config.get("rights_status", "unknown"),
                     language=feed_config.get("language", "unknown"),
                     stance=feed_config.get("stance", "neutral"),
                     is_official=bool(feed_config.get("is_official", False)),

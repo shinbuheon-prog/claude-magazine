@@ -38,6 +38,20 @@ feeds:
     topics: [gemini, ai_models, google]
     enabled: true
 
+  # ── 자체 콘텐츠 (사내 기술블로그) ──────────────
+  # 자체 콘텐츠이므로 rights_status: free + is_official: true.
+  # 매거진 "Korea Spotlight" 코너의 데이터 소스. 베스트 기고 큐레이션은
+  # scripts/curate_classmethodkr_best.py 가 별도 실행.
+  - name: "Classmethod Korea Tech Blog"
+    type: rss
+    url: "https://rss.blog.naver.com/classmethodkr.xml"
+    language: ko
+    stance: neutral
+    is_official: true
+    rights_status: free
+    topics: [claude, aws, internal_blog, korea]
+    enabled: true
+
   # ── 한국 공식 기관 ──────────────────────────
   - name: "KISA 보도자료"
     type: rss
