@@ -78,6 +78,8 @@ Claude Magazine은 **Anthropic 공식 리셀러 클래스메소드 그룹의 한
 | GitHub Discussions | https://github.com/shinbuheon-prog/claude-magazine/discussions |
 | GitHub Issues | https://github.com/shinbuheon-prog/claude-magazine/issues |
 | 이메일 (편집·기고·협업·Sponsored) | info@classmethod.kr |
+| 매거진 Threads (편집장 본인 게시) | https://www.threads.com/@s.zzangpapa/post/DXlMyXzEqnf |
+| 매거진 Threads (운영진 리포스트) | 박동현 운영진 계정 (한일 커뮤니티) |
 | 발행사 (클래스메소드코리아) | https://classmethod.jp / 050-1754-1651 |
 
 ---

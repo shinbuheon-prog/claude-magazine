@@ -311,7 +311,7 @@ pytest tests/test_failure_collector.py -v
 |---|---|---|
 | **GitHub Discussions** | 콘텐츠 제안·운영 모델 의견·일반 토론 | GitHub 계정 |
 | **GitHub Issues** | 버그 리포트·기능 제안·구체 사양 변경 | GitHub 계정 |
-| **Threads 댓글** (각 게시 시점) | 비개발자·간단한 의견 | Threads 계정 |
+| **Threads 댓글** ([편집장 게시글](https://www.threads.com/@s.zzangpapa/post/DXlMyXzEqnf) · 박동현 운영진 리포스트) | 비개발자·간단한 의견 | Threads 계정 |
 | **이메일** (info@classmethod.kr) | 협업·콘텐츠 제공·직접 연락 | 없음 (governance §"개인정보 처리 원칙" 30일 내 삭제) |
 
 상세 가이드: [CONTRIBUTING.md](CONTRIBUTING.md)
