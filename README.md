@@ -1,9 +1,11 @@
 # Claude Magazine
 
-[![Release](https://img.shields.io/github/v/release/shinbuheon-prog/claude-magazine?label=release)](https://github.com/shinbuheon-prog/claude-magazine/releases)
+[![Release](https://img.shields.io/github/v/release/shinbuheon-prog/claude-magazine?include_prereleases&label=release)](https://github.com/shinbuheon-prog/claude-magazine/releases)
 [![License](https://img.shields.io/badge/license-Internal-blue)](#license)
-[![pytest](https://img.shields.io/badge/pytest-97%2F97-green)](#testing)
+[![pytest](https://img.shields.io/badge/pytest-96%2F97-green)](#testing)
+[![Issue 1](https://img.shields.io/badge/Issue%201-2026--05--31-orange)](reports/roadmap_2026-05.md)
 [![Free Publishing](https://img.shields.io/badge/publishing-free-green)](#운영-정책)
+[![Sponsored ≤ 10%](https://img.shields.io/badge/sponsored-%E2%89%A410%25-blue)](docs/governance.md)
 
 > 한국어권 Claude 실무자를 위한 무료 발행 매거진. **인간 편집 책임 위에 Claude가 생산성을 증폭하는 운영체계**.
 
@@ -237,11 +239,12 @@ pytest --cov=pipeline.editorial_lint --cov=pipeline.citations_store --cov-report
 pytest tests/test_failure_collector.py -v
 ```
 
-**현재 상태** (v0.2.1):
-- 97 tests / 97 passed
+**현재 상태** (v0.3.0-rc1, 2026-04-26):
+- 97 tests / **96 passed** (1 fail: `test_collect_operational_signals` — 시간 의존 fixture 별건, [issue 후속 fix 예정](https://github.com/shinbuheon-prog/claude-magazine/issues))
 - editorial_lint 85% / citations_store 90% 커버리지
 - ruff lint clean
 - CI 7 job 병렬 (lint·smoke·tests·build·env·spec·mojibake) 모두 green
+- 모든 신규 파일 mojibake clean (UTF-8 검증)
 
 ---
 
