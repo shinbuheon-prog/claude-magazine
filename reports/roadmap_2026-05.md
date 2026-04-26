@@ -59,10 +59,7 @@
 
 **5월 호 발행 분량 후보**: A(4) + B(2) + C(1) + D(1) + E(1, 광고) = **9건**. 80페이지 매거진은 통상 5~7개 본 기사 + 광고 1~2 코너 적합.
 
-**80p 도달 전략**: [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) §10 + §13 5월 호 시뮬레이션:
-- 70p (Korea Spotlight 포함) + Inside Classmethod 7p = **77p**
-- + Editorial 확장 +2p (창간호 인사) + Insight KPI dashboard +3p = **82p** → 80p 컷
-- 또는 본문 일부 1~2p 컷으로 80p 정확 도달
+**80p 도달 최종 확정 (4차 갱신)**: [reports/plan_issue_2026-05_guide.md](plan_issue_2026-05_guide.md) §1 — **15 본문 꼭지 + 광고 1 코너 + 구조 8p = 80p 정확**. Editorial을 1p → 4p로 확장(창간호 특별호), 6월 호부터 표준 1p로 환원. 카테고리 분포: feature 1 / deep_dive 6 / insight 4 / interview 1 / review 3 / sponsored 1.
 
 ---
 
@@ -214,3 +211,4 @@
 - 2026-04-26: 초안 작성. v0.2.1 closure 직후, Round 2.B Gate 1 + Round 2.D Gate 1 결과를 받아 5월말 정식 발행 1호 4주 로드맵으로 정리. 사용자 명시 요구: "마지막 3·4주차에는 고도화로 퀄리티 개선". 콘텐츠 후보 7건(SNS 디제스트 4 + 갭 분석 자가 사례 2 + W4 anomaly 자가 사례 1).
 - 2026-04-26: D 그룹 (Korea Spotlight) 1코너 추가 — 콘텐츠 후보 7건 → **8건**. classmethodkr 기술블로그 자체 콘텐츠 활용. [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) 외부 큐레이션 파이프라인 5계층 설계 동시 작성. 5월 호 도달 분량 시뮬레이션 67p → **70p**.
 - 2026-04-26 (3차): E 그룹 (Inside Classmethod) 1코너 7p 추가 — 콘텐츠 후보 8건 → **9건** (광고 1 포함). 일본본사 Claude 컨설팅 PDF + 한국법인 + Claude 밋업 1회차(2025-04-23) + 커뮤니티 안내 통합. [docs/governance.md](../docs/governance.md) §"Sponsored Content" 6 의무 신규 추가. 5월 호 도달 분량 70p → **77p** (+7p, 광고 비율 8.75%). [reports/inside_classmethod_2026-05_draft.md](inside_classmethod_2026-05_draft.md) 코너 초안 동시 생성.
+- 2026-04-26 (4차): plan_issue 가이드 작성 — **15 본문 꼭지 + 광고 1 코너 + 구조 8p = 80p 정확 도달** 확정. plan_issue.py VALID_CATEGORIES에 'sponsored' 카테고리 신규 추가 (1줄 패치). 5/04 실행 명령 시퀀스 + 폴백 6건 명시. [reports/plan_issue_2026-05_guide.md](plan_issue_2026-05_guide.md) 가이드 동시 생성.
