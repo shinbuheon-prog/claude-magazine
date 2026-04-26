@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ISSUES_DIR = ROOT / "drafts" / "issues"
 ISSUES_DIR.mkdir(parents=True, exist_ok=True)
 
-VALID_CATEGORIES = {"cover", "feature", "deep_dive", "insight", "interview", "review"}
+VALID_CATEGORIES = {"cover", "feature", "deep_dive", "insight", "interview", "review", "sponsored"}
 VALID_STATUSES = [
     "planning", "brief", "draft", "fact_check", "lint", "approved", "published"
 ]
