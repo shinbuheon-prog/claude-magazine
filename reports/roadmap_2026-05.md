@@ -49,9 +49,20 @@
 
 → 자체 콘텐츠 → 인용 한도 자유 + 블로그 트래픽 유입 효과. 편집장 자가 기고 포함 시 명시 표기 의무.
 
-**5월 호 발행 분량 후보**: A(4) + B(2) + C(1) + D(1) = **8건**. 80페이지 매거진은 통상 5~7개 본 기사 적합. 1차 plan_issue에서 편집자가 우선순위 컷 + Cluster D(autofix-pr-review)는 SNS 카드뉴스로만 재가공.
+### E. Inside Classmethod — Sponsored Content 1코너 (5월 호 1회 PoC)
 
-**80p 도달 전략**: [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) §10 5월 호 시뮬레이션 — classmethodkr Korea Spotlight 3p + mckinsey-pptx 자동 인포그래픽 9p + ai-daily-digest 외부 디제스트 7p 결합 시 **70p 도달**. 추가 보강(Interview 자가 인터뷰 +5p, KPI dashboard +3p, Editorial 확장 +2p)으로 80p 정확 도달 가능.
+| 영역 | 코너 | 분량 | 출처 |
+|---|---|---|---|
+| **Sponsored (7p)** | "Inside Classmethod — Claude 도입과 커뮤니티" | **7p** | 일본본사 Claude 컨설팅 PDF + 한국법인·밋업 자료 + Claude 커뮤니티 안내. [reports/inside_classmethod_2026-05_draft.md](inside_classmethod_2026-05_draft.md) |
+
+→ 발행사 광고 코너. [docs/governance.md](../docs/governance.md) §"발행사·관계사 서비스 소개 코너" 6 의무 준수. 광고 비율 8.75% (≤10% 상한 ✅). 정기화 여부는 6/01-6/03 회고 시점 결정.
+
+**5월 호 발행 분량 후보**: A(4) + B(2) + C(1) + D(1) + E(1, 광고) = **9건**. 80페이지 매거진은 통상 5~7개 본 기사 + 광고 1~2 코너 적합.
+
+**80p 도달 전략**: [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) §10 + §13 5월 호 시뮬레이션:
+- 70p (Korea Spotlight 포함) + Inside Classmethod 7p = **77p**
+- + Editorial 확장 +2p (창간호 인사) + Insight KPI dashboard +3p = **82p** → 80p 컷
+- 또는 본문 일부 1~2p 컷으로 80p 정확 도달
 
 ---
 
@@ -202,3 +213,4 @@
 
 - 2026-04-26: 초안 작성. v0.2.1 closure 직후, Round 2.B Gate 1 + Round 2.D Gate 1 결과를 받아 5월말 정식 발행 1호 4주 로드맵으로 정리. 사용자 명시 요구: "마지막 3·4주차에는 고도화로 퀄리티 개선". 콘텐츠 후보 7건(SNS 디제스트 4 + 갭 분석 자가 사례 2 + W4 anomaly 자가 사례 1).
 - 2026-04-26: D 그룹 (Korea Spotlight) 1코너 추가 — 콘텐츠 후보 7건 → **8건**. classmethodkr 기술블로그 자체 콘텐츠 활용. [docs/integrations/external_curation_pipeline.md](../docs/integrations/external_curation_pipeline.md) 외부 큐레이션 파이프라인 5계층 설계 동시 작성. 5월 호 도달 분량 시뮬레이션 67p → **70p**.
+- 2026-04-26 (3차): E 그룹 (Inside Classmethod) 1코너 7p 추가 — 콘텐츠 후보 8건 → **9건** (광고 1 포함). 일본본사 Claude 컨설팅 PDF + 한국법인 + Claude 밋업 1회차(2025-04-23) + 커뮤니티 안내 통합. [docs/governance.md](../docs/governance.md) §"Sponsored Content" 6 의무 신규 추가. 5월 호 도달 분량 70p → **77p** (+7p, 광고 비율 8.75%). [reports/inside_classmethod_2026-05_draft.md](inside_classmethod_2026-05_draft.md) 코너 초안 동시 생성.
