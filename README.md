@@ -291,13 +291,36 @@ pytest tests/test_failure_collector.py -v
 
 ---
 
+## 피드백 환영 (2026-05 정식 발행 1호 준비 중)
+
+매거진은 **2026-05-31 정식 발행 1호(Issue 1)**를 앞두고 외부 피드백을 받고 있습니다. 한국어권 Claude 사용자 관점의 의견을 환영합니다.
+
+### 어떤 피드백을 원하는가
+- 어떤 Claude 주제를 매거진에서 보고 싶은가 (콘텐츠 제안)
+- 한국어권 Claude 사용자 관점에서 부족한 콘텐츠 영역
+- 매거진 운영 모델(무료 발행 + 인간 편집 + AI 보조 + 자체 사례 + 외부 큐레이션)에 대한 의견
+- AWS Bedrock·MCP·Cowork·Claude Code 운영 경험·트러블슈팅 사례 (매거진 본문 source 후보)
+- 디자인·레이아웃·페이지 구성 (80p PDF · Vite+React+Puppeteer 출력)
+- 발행 자동화 운영 정책 (무료 LLM 운영·Sponsored Content 표기 6 의무·소셜 채널 자동 크롤링 기각 등)
+
+### 피드백 경로
+| 경로 | 대상 | 진입 장벽 |
+|---|---|---|
+| **GitHub Discussions** | 콘텐츠 제안·운영 모델 의견·일반 토론 | GitHub 계정 |
+| **GitHub Issues** | 버그 리포트·기능 제안·구체 사양 변경 | GitHub 계정 |
+| **Threads 댓글** (각 게시 시점) | 비개발자·간단한 의견 | Threads 계정 |
+| **이메일** (info@classmethod.kr) | 협업·콘텐츠 제공·직접 연락 | 없음 (governance §"개인정보 처리 원칙" 30일 내 삭제) |
+
+상세 가이드: [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## 기여
 
 매거진은 현재 1인 편집자 + AI 보조 모델로 운영됩니다. 외부 기여는 다음 경로:
 
+- **콘텐츠 제안·운영 모델 토론**: GitHub Discussions (가장 환영)
 - **버그 리포트·기능 제안**: GitHub Issues
-- **콘텐츠 제안**: 편집자 직접 연락 (`docs/governance.md` 정정·기여 정책 참조)
-- **코드 기여**: PR 환영 — 기여 전 `CONTRIBUTING.md` 및 `CLAUDE.md` 코딩 규칙 일독
+- **코드 기여**: PR 환영 — 기여 전 [CONTRIBUTING.md](CONTRIBUTING.md) 및 [CLAUDE.md](CLAUDE.md) 코딩 규칙 일독
+- **Sponsored Content 협업·문의**: 발행사 클래스메소드(코리아 법인) info@classmethod.kr (governance.md §"Sponsored Content" 6 의무 준수)
 
 ---
 
