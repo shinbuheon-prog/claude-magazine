@@ -38,6 +38,7 @@ python pipeline/source_diversity.py --article-id {article_id} --strict
   - 단순 기사 → light
   - 심층 리포트 → heavy (사용 모델 명시)
   - 인터뷰 → interview
+  - sponsored 코너 → light + Sponsored Content 배지 별도 (governance.md §"Sponsored Content")
 ```bash
 python pipeline/disclosure_injector.py --html {html_path} --template {heavy|light|interview}
 ```
@@ -46,7 +47,32 @@ python pipeline/disclosure_injector.py --html {html_path} --template {heavy|ligh
 python pipeline/disclosure_injector.py --ghost-post-id {id} --template heavy
 ```
 
-### 5. 최종 승인 준비 메시지
+### 5. 종합 품질 검수 (template_quality_review.txt)
+8 검수 기준 + 매거진 고유 5 추가 기준 = 13 항목 종합 평가. Opus 4.7 호출.
+
+검수 기준 8 (사용자 프롬프트 6 통합):
+1. 단순 뉴스 요약에 그치지 않았는가 (맥락·의미·실행 시사점)
+2. 비즈니스 인사이트가 충분한가 (왜 중요한가·누가 영향·기회·리스크)
+3. 출처와 사실관계가 명확한가
+4. 과장된 표현·검증되지 않은 예측·투자 조언 단정이 없는가
+5. 한국 독자에게 실질적인 시사점이 있는가
+6. 제목과 소제목이 읽고 싶게 구성되었는가 (과장 없이)
+7. 반복 표현·중복 정보가 많지 않은가
+8. 각 섹션 간 논리 흐름이 자연스러운가
+
+매거진 고유 5 (1~4단계와 일부 중첩, 종합 점검):
+9. AI 사용 고지가 본문 하단에 1줄 노출되는가
+10. em-dash(—) 사용 일관성 (하이픈 - 무단 변경 없음)
+11. 인용 한도 200자 이하 준수 (rights_status: free 자체 콘텐츠 예외)
+12. Sponsored Content 표기 6 의무 (광고 코너에만 적용)
+13. Korean UTF-8 인코딩 mojibake 없음
+
+판정:
+- **pass**: 13/13 통과 → 그대로 발행 가능
+- **partial**: 10~12 통과, 1~3건 편집자 수동 검토 필요 → 검토 후 발행 가능
+- **fail**: 9 이하 또는 매거진 고유 5건 중 1건이라도 fail → draft 재작성 권장 (다음 단계 진행 금지)
+
+### 6. 최종 승인 준비 메시지
 ```
 ✅ 발행 게이트 전부 통과
   - editorial_lint: 10/10
