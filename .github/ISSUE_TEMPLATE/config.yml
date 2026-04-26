@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💡 콘텐츠 주제 제안 (Discussion 권장)
+    url: https://github.com/shinbuheon-prog/claude-magazine/discussions/categories/ideas
+    about: 어떤 Claude 주제를 매거진에서 다뤘으면 좋겠는지 GitHub Discussions에 제안해 주세요. (Issue보다 Discussion이 적합)
+  - name: 💬 운영 모델·일반 토론
+    url: https://github.com/shinbuheon-prog/claude-magazine/discussions/categories/general
+    about: 매거진 운영 방식·정책 토론은 Discussions에서 진행합니다.
+  - name: ❓ 사용 질문 (Q&A)
+    url: https://github.com/shinbuheon-prog/claude-magazine/discussions/categories/q-a
+    about: 매거진·도구·운영 관련 질문은 Q&A 카테고리에서.
+  - name: 🤝 협업·기고·Sponsored Content 문의
+    url: mailto:info@classmethod.kr
+    about: 콘텐츠 제공·인터뷰·관계사 협업·Sponsored Content 협업은 이메일로 문의해 주세요.
