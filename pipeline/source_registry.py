@@ -25,6 +25,7 @@ CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS sources (
     source_id        TEXT PRIMARY KEY,
     url              TEXT NOT NULL,
+    title            TEXT DEFAULT '',
     publisher        TEXT DEFAULT '',
     retrieved_at     TEXT,
     version_hash     TEXT DEFAULT '',
@@ -35,15 +36,38 @@ CREATE TABLE IF NOT EXISTS sources (
     article_id       TEXT DEFAULT '',
     language         TEXT DEFAULT 'unknown',
     stance           TEXT DEFAULT 'neutral',
-    is_official      INTEGER DEFAULT 0
+    is_official      INTEGER DEFAULT 0,
+    source_type      TEXT DEFAULT 'rss',
+    topics           TEXT DEFAULT '[]',
+    content_preview  TEXT DEFAULT '',
+    content_body     TEXT DEFAULT '',
+    claude_relevance REAL DEFAULT 0.0,
+    relevance_breakdown TEXT DEFAULT '{}',
+    magazine_category TEXT DEFAULT '',
+    summary_oneliner TEXT DEFAULT '',
+    summary_3line    TEXT DEFAULT '',
+    key_quotes       TEXT DEFAULT '[]',
+    summarized_at    TEXT DEFAULT ''
 );
 """
 
 # TASK_019: 소스 다양성 규칙 엔진용 확장 컬럼 (idempotent migration)
 DIVERSITY_COLUMNS = [
+    ("title", "TEXT DEFAULT ''"),
     ("language", "TEXT DEFAULT 'unknown'"),
     ("stance", "TEXT DEFAULT 'neutral'"),
     ("is_official", "INTEGER DEFAULT 0"),
+    ("source_type", "TEXT DEFAULT 'rss'"),
+    ("topics", "TEXT DEFAULT '[]'"),
+    ("content_preview", "TEXT DEFAULT ''"),
+    ("content_body", "TEXT DEFAULT ''"),
+    ("claude_relevance", "REAL DEFAULT 0.0"),
+    ("relevance_breakdown", "TEXT DEFAULT '{}'"),
+    ("magazine_category", "TEXT DEFAULT ''"),
+    ("summary_oneliner", "TEXT DEFAULT ''"),
+    ("summary_3line", "TEXT DEFAULT ''"),
+    ("key_quotes", "TEXT DEFAULT '[]'"),
+    ("summarized_at", "TEXT DEFAULT ''"),
 ]
 
 
@@ -80,14 +104,21 @@ def _hash_content(content_preview: str) -> str:
 
 def add_source(
     url,
+    title="",
     publisher="",
     content_preview="",
+    content_body="",
     rights_status="unknown",
     quote_limit=200,
     article_id="",
     language="unknown",
     stance="neutral",
     is_official=0,
+    source_type="rss",
+    topics=None,
+    claude_relevance=0.0,
+    relevance_breakdown=None,
+    magazine_category="",
     auto_classify_stance: bool = False,
     topic: str = "",
 ) -> str:
@@ -127,14 +158,17 @@ def add_source(
         conn.execute(
             """
             INSERT INTO sources (
-                source_id, url, publisher, retrieved_at, version_hash,
+                source_id, url, title, publisher, retrieved_at, version_hash,
                 rights_status, quote_limit, article_id,
-                language, stance, is_official
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                language, stance, is_official, source_type, topics,
+                content_preview, content_body, claude_relevance,
+                relevance_breakdown, magazine_category
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source_id,
                 url,
+                title,
                 publisher,
                 retrieved_at,
                 version_hash,
@@ -144,6 +178,13 @@ def add_source(
                 language,
                 stance,
                 int(bool(is_official)),
+                source_type,
+                json.dumps(list(topics or []), ensure_ascii=False),
+                content_preview,
+                content_body,
+                float(claude_relevance or 0.0),
+                json.dumps(relevance_breakdown or {}, ensure_ascii=False),
+                magazine_category,
             ),
         )
         conn.commit()
@@ -155,6 +196,7 @@ def add_source(
 def update_source(source_id: str, **fields) -> bool:
     """source_id 기준으로 지정 필드를 업데이트. 존재하지 않으면 False."""
     allowed = {
+        "title",
         "publisher",
         "rights_status",
         "quote_limit",
@@ -162,6 +204,17 @@ def update_source(source_id: str, **fields) -> bool:
         "language",
         "stance",
         "is_official",
+        "source_type",
+        "topics",
+        "content_preview",
+        "content_body",
+        "claude_relevance",
+        "relevance_breakdown",
+        "magazine_category",
+        "summary_oneliner",
+        "summary_3line",
+        "key_quotes",
+        "summarized_at",
     }
     updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
     if not updates:
@@ -174,6 +227,13 @@ def update_source(source_id: str, **fields) -> bool:
         ).fetchone()
         if row is None:
             return False
+
+        if "topics" in updates and not isinstance(updates["topics"], str):
+            updates["topics"] = json.dumps(list(updates["topics"]), ensure_ascii=False)
+        if "relevance_breakdown" in updates and not isinstance(updates["relevance_breakdown"], str):
+            updates["relevance_breakdown"] = json.dumps(updates["relevance_breakdown"], ensure_ascii=False)
+        if "key_quotes" in updates and not isinstance(updates["key_quotes"], str):
+            updates["key_quotes"] = json.dumps(updates["key_quotes"], ensure_ascii=False)
 
         set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
         params = list(updates.values()) + [source_id]
@@ -195,6 +255,9 @@ def get_source(source_id: str) -> dict | None:
         source = dict(row)
         source["claim_ids"] = json.loads(source["claim_ids"])
         source["used_in_channels"] = json.loads(source["used_in_channels"])
+        source["topics"] = json.loads(source.get("topics") or "[]")
+        source["relevance_breakdown"] = json.loads(source.get("relevance_breakdown") or "{}")
+        source["key_quotes"] = json.loads(source.get("key_quotes") or "[]")
         return source
     finally:
         conn.close()
@@ -236,6 +299,9 @@ def list_sources(article_id: str) -> list[dict]:
             source = dict(row)
             source["claim_ids"] = json.loads(source["claim_ids"])
             source["used_in_channels"] = json.loads(source["used_in_channels"])
+            source["topics"] = json.loads(source.get("topics") or "[]")
+            source["relevance_breakdown"] = json.loads(source.get("relevance_breakdown") or "{}")
+            source["key_quotes"] = json.loads(source.get("key_quotes") or "[]")
             sources.append(source)
         return sources
     finally:
@@ -249,15 +315,20 @@ def _cli_update(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="source 메타데이터 업데이트")
     parser.add_argument("source_id", help="업데이트할 source_id")
     parser.add_argument("--publisher")
+    parser.add_argument("--title")
     parser.add_argument("--rights-status", dest="rights_status")
     parser.add_argument("--quote-limit", dest="quote_limit", type=int)
     parser.add_argument("--article-id", dest="article_id")
     parser.add_argument("--language", choices=["ko", "en", "ja", "zh", "unknown"])
     parser.add_argument("--stance", choices=["pro", "neutral", "con", "unknown"])
     parser.add_argument("--is-official", dest="is_official", type=int, choices=[0, 1])
+    parser.add_argument("--source-type", dest="source_type")
+    parser.add_argument("--topics", help="comma-separated topics")
     args = parser.parse_args(argv)
 
     fields = {k: v for k, v in vars(args).items() if k != "source_id" and v is not None}
+    if "topics" in fields:
+        fields["topics"] = [item.strip() for item in str(fields["topics"]).split(",") if item.strip()]
     ok = update_source(args.source_id, **fields)
     if ok:
         print(f"✓ {args.source_id} 업데이트 완료: {fields}")
@@ -278,7 +349,15 @@ if __name__ == "__main__":
     test_suffix = uuid.uuid4().hex[:8]
     test_article_id = f"art-{test_suffix}"
     test_url = f"https://example.com/{test_suffix}"
-    sid = add_source(url=test_url, publisher="Test", article_id=test_article_id)
+    sid = add_source(
+        url=test_url,
+        title="Test title",
+        publisher="Test",
+        article_id=test_article_id,
+        content_preview="preview",
+        content_body="body",
+        topics=["test"],
+    )
     assert sid.startswith("src-")
     assert get_source(sid)["url"] == test_url
     duplicate_sid = add_source(url=test_url, publisher="Test", article_id=test_article_id)
@@ -293,6 +372,9 @@ if __name__ == "__main__":
     assert "language" in row and "stance" in row and "is_official" in row
     assert row["stance"] == "neutral"
     assert row["is_official"] == 0
+    assert row["title"] == "Test title"
+    assert row["content_body"] == "body"
+    assert row["topics"] == ["test"]
     assert update_source(sid, stance="pro", language="en", is_official=1) is True
     row2 = get_source(sid)
     assert row2["stance"] == "pro"

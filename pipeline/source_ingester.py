@@ -203,10 +203,12 @@ def ingest_url(feed_config: dict[str, Any], dry_run: bool = False) -> dict[str, 
     return {
         "title": title,
         "preview": body[:CONTENT_PREVIEW_MAX],
+        "content_body": body,
         "artifact_path": str(artifact_path.relative_to(ROOT)) if artifact_path else "",
         "entry_url": source_url,
         "publisher": name,
         "topics": list(feed_config.get("topics", [])),
+        "source_type": "url",
         "classified_by": "baoyu-url-to-markdown-wrapper",
     }
 
@@ -240,15 +242,150 @@ def ingest_youtube(feed_config: dict[str, Any], dry_run: bool = False) -> dict[s
     return {
         "title": title,
         "preview": f"YouTube transcript placeholder for {video_id}",
+        "content_body": body,
         "artifact_path": str(artifact_path.relative_to(ROOT)) if artifact_path else "",
         "entry_url": source_url,
         "publisher": str(feed_config.get("publisher") or "YouTube"),
         "topics": list(feed_config.get("topics", [])),
+        "source_type": "youtube",
         "classified_by": "baoyu-youtube-transcript-wrapper",
     }
 
 
 # ── 피드 처리 ─────────────────────────────────────
+
+def _normalize_external_item(
+    *,
+    title: str,
+    body: str,
+    entry_url: str,
+    publisher: str,
+    topics: list[str],
+    source_type: str,
+    extra_lines: list[str] | None = None,
+) -> dict[str, Any]:
+    lines = [body.strip()] if body.strip() else []
+    if extra_lines:
+        lines.extend(line for line in extra_lines if line)
+    content_body = "\n".join(lines).strip()
+    return {
+        "title": title.strip() or entry_url,
+        "preview": content_body[:CONTENT_PREVIEW_MAX],
+        "content_body": content_body,
+        "artifact_path": "",
+        "entry_url": entry_url,
+        "publisher": publisher,
+        "topics": topics,
+        "source_type": source_type,
+        "classified_by": f"{source_type}-ingester",
+    }
+
+
+def ingest_arxiv(feed_config: dict[str, Any], dry_run: bool = False) -> list[dict[str, Any]]:
+    from pipeline.ingesters.arxiv import fetch_recent_papers
+
+    papers = fetch_recent_papers(
+        query=str(feed_config.get("query", "")).strip(),
+        category=str(feed_config.get("category", "cs.AI")).strip() or "cs.AI",
+        since_days=int(feed_config.get("since_days", 30) or 30),
+        max_results=int(feed_config.get("max_results", 100) or 100),
+    )
+    if dry_run:
+        papers = papers[: min(5, len(papers))]
+
+    normalized: list[dict[str, Any]] = []
+    for paper in papers:
+        authors = ", ".join(paper.get("authors") or [])
+        normalized.append(
+            _normalize_external_item(
+                title=str(paper.get("title") or ""),
+                body=str(paper.get("abstract") or ""),
+                entry_url=str(paper.get("link") or ""),
+                publisher="arXiv",
+                topics=list(feed_config.get("topics", [])),
+                source_type="arxiv",
+                extra_lines=[
+                    f"arxiv_id: {paper.get('arxiv_id') or ''}",
+                    f"published: {paper.get('published') or ''}",
+                    f"authors: {authors}",
+                ],
+            )
+        )
+    return normalized
+
+
+def ingest_hackernews(feed_config: dict[str, Any], dry_run: bool = False) -> list[dict[str, Any]]:
+    from pipeline.ingesters.hackernews import fetch_top_stories
+
+    stories = fetch_top_stories(
+        query=str(feed_config.get("query", "")).strip(),
+        since_days=int(feed_config.get("since_days", 30) or 30),
+        min_points=int(feed_config.get("min_points", 10) or 10),
+        max_results=int(feed_config.get("max_results", 50) or 50),
+    )
+    if dry_run:
+        stories = stories[: min(5, len(stories))]
+
+    normalized: list[dict[str, Any]] = []
+    for story in stories:
+        normalized.append(
+            _normalize_external_item(
+                title=str(story.get("title") or ""),
+                body=str(story.get("text") or ""),
+                entry_url=str(story.get("story_url") or ""),
+                publisher="Hacker News (HN)",
+                topics=list(feed_config.get("topics", [])),
+                source_type="hackernews",
+                extra_lines=[
+                    f"points: {story.get('points') or 0}",
+                    f"comments: {story.get('num_comments') or 0}",
+                    f"author: {story.get('author') or ''}",
+                    f"external_url: {story.get('url') or ''}",
+                ],
+            )
+        )
+    return normalized
+
+
+def ingest_reddit(feed_config: dict[str, Any], dry_run: bool = False) -> list[dict[str, Any]]:
+    from pipeline.ingesters.reddit import fetch_top_posts
+
+    query = str(feed_config.get("query", "")).strip().lower()
+    keywords = [
+        part.strip().strip('"')
+        for part in query.replace("(", " ").replace(")", " ").split("or")
+        if part.strip() and part.strip() != "and"
+    ]
+    posts = fetch_top_posts(
+        subreddits=list(feed_config.get("subreddits", [])),
+        keywords=keywords or ["claude", "anthropic", "mcp"],
+        since_days=int(feed_config.get("since_days", 30) or 30),
+        min_score=int(feed_config.get("min_score", 20) or 20),
+        max_results=int(feed_config.get("max_results", 50) or 50),
+    )
+    if dry_run:
+        posts = posts[: min(5, len(posts))]
+
+    normalized: list[dict[str, Any]] = []
+    for post in posts:
+        normalized.append(
+            _normalize_external_item(
+                title=str(post.get("title") or ""),
+                body=str(post.get("selftext") or ""),
+                entry_url=f"https://reddit.com{post.get('permalink') or ''}",
+                publisher=f"Reddit r/{post.get('subreddit') or ''} ({post.get('author') or ''})",
+                topics=list(feed_config.get("topics", [])),
+                source_type="reddit",
+                extra_lines=[
+                    f"score: {post.get('score') or 0}",
+                    f"comments: {post.get('num_comments') or 0}",
+                    f"created_at: {post.get('created_at') or ''}",
+                    f"external_url: {post.get('url') or ''}",
+                ],
+            )
+        )
+    return normalized
+
 
 def fetch_feed(url: str, timeout: int = NETWORK_TIMEOUT) -> list[Any]:
     """RSS/Atom 피드 fetch. 실패 시 빈 리스트 + stderr 로그."""
@@ -404,6 +541,54 @@ def ingest_feeds(
         summary["feeds_processed"] += 1
         detail: dict[str, Any] = {"feed": name, "type": feed_type, "new": 0, "dup": 0, "errors": []}
 
+        if feed_type in {"arxiv", "hackernews", "reddit"}:
+            try:
+                if feed_type == "arxiv":
+                    processed_items = ingest_arxiv(feed_config, dry_run=dry_run)
+                elif feed_type == "hackernews":
+                    processed_items = ingest_hackernews(feed_config, dry_run=dry_run)
+                else:
+                    processed_items = ingest_reddit(feed_config, dry_run=dry_run)
+            except Exception as exc:
+                detail["errors"].append(f"{feed_type} ingest failed: {exc}")
+                summary["entries_skipped"] += 1
+                summary["details"].append(detail)
+                continue
+
+            summary["entries_fetched"] += len(processed_items)
+            for processed in processed_items:
+                existing_id = detect_duplicate(str(processed["entry_url"]))
+                if existing_id:
+                    summary["entries_duplicate"] += 1
+                    detail["dup"] += 1
+                    continue
+                detail["new"] += 1
+                summary["entries_new"] += 1
+                if dry_run:
+                    continue
+                try:
+                    add_source(
+                        url=processed["entry_url"],
+                        title=processed["title"],
+                        publisher=processed["publisher"],
+                        content_preview=processed["preview"],
+                        content_body=processed.get("content_body", ""),
+                        rights_status=feed_config.get("rights_status", "unknown"),
+                        quote_limit=int(feed_config.get("quote_limit", 200) or 200),
+                        article_id=str(feed_config.get("article_id", "") or ""),
+                        language=feed_config.get("language", "unknown"),
+                        stance=feed_config.get("stance", "neutral"),
+                        is_official=bool(feed_config.get("is_official", False)),
+                        source_type=processed.get("source_type", feed_type),
+                        topics=processed.get("topics", feed_config.get("topics", [])),
+                    )
+                    summary["entries_registered"] += 1
+                except Exception as exc:
+                    detail["errors"].append(f"register failed: {exc}")
+                    summary["entries_skipped"] += 1
+            summary["details"].append(detail)
+            continue
+
         if feed_type in {"url", "youtube"}:
             summary["entries_fetched"] += 1
             existing_id = detect_duplicate(url)
@@ -434,12 +619,18 @@ def ingest_feeds(
                 try:
                     add_source(
                         url=processed["entry_url"],
+                        title=processed["title"],
                         publisher=processed["publisher"],
                         content_preview=processed["preview"],
-                        rights_status="unknown",
+                        content_body=processed.get("content_body", ""),
+                        rights_status=feed_config.get("rights_status", "unknown"),
+                        quote_limit=int(feed_config.get("quote_limit", 200) or 200),
+                        article_id=str(feed_config.get("article_id", "") or ""),
                         language=feed_config.get("language", "unknown"),
                         stance=feed_config.get("stance", "neutral"),
                         is_official=bool(feed_config.get("is_official", False)),
+                        source_type=processed.get("source_type", feed_type),
+                        topics=processed.get("topics", feed_config.get("topics", [])),
                     )
                     summary["entries_registered"] += 1
                 except Exception as exc:
@@ -514,12 +705,19 @@ def ingest_feeds(
             try:
                 add_source(
                     url=entry_url,
+                    title=title,
                     publisher=name,
                     content_preview=preview,
+                    content_body=preview,
                     rights_status=feed_config.get("rights_status", "unknown"),
+                    quote_limit=int(feed_config.get("quote_limit", 200) or 200),
+                    article_id=str(feed_config.get("article_id", "") or ""),
                     language=feed_config.get("language", "unknown"),
                     stance=feed_config.get("stance", "neutral"),
                     is_official=bool(feed_config.get("is_official", False)),
+                    source_type=feed_type,
+                    topics=classification.get("topics", feed_config.get("topics", [])),
+                    claude_relevance=float(classification.get("relevance_score", 0.5) or 0.0),
                 )
                 summary["entries_registered"] += 1
             except Exception as exc:

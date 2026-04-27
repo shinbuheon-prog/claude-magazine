@@ -101,6 +101,51 @@ feeds:
     enabled: false  # 수량 너무 많아 수동 활성화
 
   # ── TASK_040: baoyu wrapper sample entries ─────────────────────────
+  - name: "arXiv cs.AI (Claude keywords)"
+    type: arxiv
+    url: "http://export.arxiv.org/api/query"
+    query: "claude OR anthropic OR constitutional ai OR rlhf"
+    category: cs.AI
+    since_days: 30
+    max_results: 100
+    language: en
+    stance: neutral
+    is_official: true
+    rights_status: free
+    topics: [arxiv, papers, claude, ai_research]
+    enabled: true
+
+  - name: "Hacker News (Claude keywords)"
+    type: hackernews
+    url: "https://hn.algolia.com/api/v1/search"
+    query: "claude OR anthropic OR mcp"
+    since_days: 30
+    min_points: 10
+    max_results: 50
+    language: en
+    stance: neutral
+    is_official: false
+    rights_status: free
+    quote_limit: 100
+    topics: [hackernews, claude, ai_news, community]
+    enabled: true
+
+  - name: "Reddit r/ClaudeAI (Claude keywords)"
+    type: reddit
+    url: "https://oauth.reddit.com"
+    subreddits: [ClaudeAI, LocalLLaMA, MachineLearning]
+    query: "claude OR anthropic OR mcp"
+    since_days: 30
+    min_score: 20
+    max_results: 50
+    language: en
+    stance: neutral
+    is_official: false
+    rights_status: free
+    quote_limit: 200
+    topics: [reddit, claude, ai_news, community]
+    enabled: false
+
   - name: "Single URL Sample"
     type: url
     url: "https://example.com/article"

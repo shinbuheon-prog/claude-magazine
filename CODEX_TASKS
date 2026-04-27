@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-25 08:50
+# 업데이트: 2026-04-27 10:03
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -58,11 +58,11 @@ TASK_051 | 발행 실패 복구 플레이북 (spec/failure_playbook.yml + 자동
 TASK_052 | GitHub Actions CI 확장 (pytest + npm build + check_env + spec-lint + mojibake-scan) | merged
 TASK_053 | weekly_improvement에 cache·citations·illustration·publish 신호 소비 추가 (Phase 8) | merged
 TASK_054 | 반복 실패 감지 + weekly_improvement 우선순위 큐 (Phase 8) | merged
-TASK_055 | arXiv ingester (외부 큐레이션 L1 어댑터, Phase 9) | todo
-TASK_056 | Hacker News Algolia API ingester (Phase 9) | todo
-TASK_057 | Reddit OAuth ingester (r/ClaudeAI 등, Aho-Corasick 키워드 매칭, Phase 9) | todo
-TASK_058 | pipeline/auto_summarizer.py L3 (Sonnet/Haiku 자동 요약, Phase 9) | todo
-TASK_059 | pipeline/monthly_curator.py L4 (Opus 클러스터링 + 매거진 섹션 매핑, Phase 9) | todo
+TASK_055 | arXiv ingester (외부 큐레이션 L1 어댑터, Phase 9) | merged
+TASK_056 | Hacker News Algolia API ingester (Phase 9) | merged
+TASK_057 | Reddit OAuth ingester (r/ClaudeAI 등, Aho-Corasick 키워드 매칭, Phase 9) | merged
+TASK_058 | pipeline/auto_summarizer.py L3 (Sonnet/Haiku 자동 요약, Phase 9) | merged
+TASK_059 | pipeline/monthly_curator.py L4 (Opus 클러스터링 + 매거진 섹션 매핑, Phase 9) | merged
 TASK_060 | G2 자동 게이트 (confirmed_ratio < 0.85 → 편집자 알림, Phase 9) | todo
 TASK_061 | G5 비용 초과 게이트 (자동 차단 → 편집자 승인 흐름, Phase 9) | todo
 TASK_062 | 종합 품질 검수 자동 호출 (template_quality_review.txt + Opus 4.7, Phase 9) | todo
