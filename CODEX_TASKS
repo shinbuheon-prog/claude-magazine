@@ -1,5 +1,5 @@
 # CODEX_TASKS — 클로드 매거진
-# 업데이트: 2026-04-27 10:03
+# 업데이트: 2026-04-27 12:50
 #
 # FORMAT: TASK_ID | 제목 | status
 # STATUS: todo | implemented | reviewed | merged
@@ -63,7 +63,7 @@ TASK_056 | Hacker News Algolia API ingester (Phase 9) | merged
 TASK_057 | Reddit OAuth ingester (r/ClaudeAI 등, Aho-Corasick 키워드 매칭, Phase 9) | merged
 TASK_058 | pipeline/auto_summarizer.py L3 (Sonnet/Haiku 자동 요약, Phase 9) | merged
 TASK_059 | pipeline/monthly_curator.py L4 (Opus 클러스터링 + 매거진 섹션 매핑, Phase 9) | merged
-TASK_060 | G2 자동 게이트 (confirmed_ratio < 0.85 → 편집자 알림, Phase 9) | todo
-TASK_061 | G5 비용 초과 게이트 (자동 차단 → 편집자 승인 흐름, Phase 9) | todo
-TASK_062 | 종합 품질 검수 자동 호출 (template_quality_review.txt + Opus 4.7, Phase 9) | todo
-TASK_063 | source_diversity 트리플 패턴 강제 (한국어 1 + 원문 1 + 반대 관점 1, Phase 9) | todo
+TASK_060 | G2 자동 게이트 (confirmed_ratio < 0.85 → 편집자 알림, Phase 9) | merged
+TASK_061 | G5 비용 초과 게이트 (자동 차단 → 편집자 승인 흐름, Phase 9) | merged
+TASK_062 | 종합 품질 검수 자동 호출 (template_quality_review.txt + Opus 4.7, Phase 9) | merged
+TASK_063 | source_diversity 트리플 패턴 강제 (한국어 1 + 원문 1 + 반대 관점 1, Phase 9) | merged
