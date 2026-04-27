@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>Claude Magazine Issue 0 — Pilot Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700&family=Pretendard:wght@400;500;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 210mm; height: 297mm; }
+  body {
+    font-family: 'Noto Serif KR', serif;
+    background: #faf8f4;
+    color: #1c1917;
+    padding: 18mm 16mm;
+    line-height: 1.6;
+  }
+  .frame {
+    border-top: 4px solid #1c1917;
+    border-bottom: 1px solid #d6d3d1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 6mm 0 8mm;
+    border-bottom: 1px solid #d6d3d1;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .brand {
+    font-family: 'Pretendard', sans-serif;
+    font-weight: 700;
+    font-size: 14pt;
+    letter-spacing: -0.5px;
+    color: #1c1917;
+  }
+  .brand-meta {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 8pt;
+    color: #78716c;
+    letter-spacing: 0.5px;
+  }
+  .issue-tag {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 8pt;
+    color: #ea580c;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 28pt;
+    line-height: 1.25;
+    margin: 8mm 0 4mm;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #1c1917;
+  }
+  .subtitle {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 11pt;
+    color: #57534e;
+    font-weight: 400;
+    margin-bottom: 8mm;
+    line-height: 1.55;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 8mm;
+    padding-top: 4mm;
+  }
+  .col-left p {
+    font-size: 10.5pt;
+    margin-bottom: 3.5mm;
+    text-align: justify;
+    text-justify: inter-word;
+  }
+  .col-left p:first-child::first-letter {
+    font-size: 32pt;
+    font-weight: 700;
+    float: left;
+    line-height: 0.9;
+    margin: 1mm 2mm 0 0;
+    color: #ea580c;
+  }
+  .col-right {
+    background: #f5f5f4;
+    padding: 6mm 5mm;
+    border-left: 3px solid #ea580c;
+  }
+  .stats-title {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 9pt;
+    color: #78716c;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 4mm;
+  }
+  .stat-block { margin-bottom: 5mm; }
+  .stat-num {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 22pt;
+    font-weight: 700;
+    color: #1c1917;
+    line-height: 1.1;
+  }
+  .stat-label {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 8.5pt;
+    color: #57534e;
+    margin-top: 1mm;
+  }
+  .phase-list {
+    list-style: none;
+    margin-top: 4mm;
+    border-top: 1px dashed #d6d3d1;
+    padding-top: 4mm;
+  }
+  .phase-list li {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 8.5pt;
+    color: #44403c;
+    padding: 1.5mm 0;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted #e7e5e4;
+  }
+  .phase-list .ok { color: #15803d; font-weight: 600; }
+  .phase-list .pending { color: #c2410c; font-weight: 500; }
+  footer {
+    padding-top: 6mm;
+    border-top: 1px solid #d6d3d1;
+    font-family: 'Pretendard', sans-serif;
+    font-size: 7.5pt;
+    color: #78716c;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ai-disclosure {
+    font-style: italic;
+    font-size: 7pt;
+  }
+  .links { font-family: 'JetBrains Mono', monospace; font-size: 7pt; }
+  .links span { color: #ea580c; }
+  .pull-quote {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 11pt;
+    font-style: italic;
+    color: #44403c;
+    border-left: 2px solid #ea580c;
+    padding-left: 4mm;
+    margin: 4mm 0;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div>
+        <div class="brand">Claude Magazine</div>
+        <div class="brand-meta">한국어권 Claude 실무자를 위한 무료 발행 매거진</div>
+      </div>
+      <div class="issue-tag">ISSUE 0 · PILOT PREVIEW · 2026.04.27</div>
+    </header>
+
+    <h1>매거진 자체를 만드는 기록</h1>
+    <p class="subtitle">v0.2.1에서 v0.3.0-rc1까지 — Phase 9 외부 큐레이션 파이프라인 머지로 5월 31일 정식 발행 1호 인프라 완비</p>
+
+    <main>
+      <div class="col-left">
+        <p>매거진은 단일 세션 안에서 33개 commit, 7,908줄의 코드·문서 추가로 운영체계 한 묶음을 통째로 진전시켰다. 발단은 v0.2.1 Phase 8 closure 직후 — "5월 31일 Issue 1 정식 발행"이라는 단일 목표로 설계·검증·외부 채널 노출이 동시 진행됐다.</p>
+
+        <p>핵심 변화는 셋이다. 첫째, 80페이지 표준 지면 배분(Cover 14p · Deep Dive 24p · Insight 12p · Interview 5p · Review 9p · Sponsored 7p · 구조 9p)에 정확히 들어맞는 16 꼭지 매핑을 확정했다. 둘째, 외부 큐레이션 파이프라인 5계층(수집 → 필터 → 요약 → 클러스터링 → 채택)을 Phase 9로 정식화하고 9개 TASK를 모두 머지했다. 셋째, 발행사 광고 코너 "Inside Classmethod"를 위한 Sponsored Content 6 의무 거버넌스를 명문화했다.</p>
+
+        <div class="pull-quote">"AI는 편집자를 대체하지 않는다. 편집자가 더 많은 것을 더 잘하게 한다."</div>
+
+        <p>이 매거진의 정체성은 명확하다. 인간 편집 책임 위에 Claude AI가 생산성을 증폭하는 운영체계. 무료 발행 — 결제·유료 구독 시스템 도입 계획 없음. 본 1p preview 자체도 자체 운영의 산출물이다.</p>
+
+        <p>5월 호 Issue 1은 Cover Story로 "Claude Code 멀티에이전트 운영 가이드"를 채택한다. Deep Dive 6 꼭지 중 4건은 외부 큐레이션 파이프라인이 자동 수집한 source(arXiv·HN·Anthropic Engineering·외부 디제스트)로 채워진다. Korea Spotlight 코너는 Classmethod Korea 기술블로그 베스트 기고를 매월 정기 큐레이션한다.</p>
+      </div>
+
+      <div class="col-right">
+        <div class="stats-title">v0.2.1 → v0.3.0-rc1 통계</div>
+
+        <div class="stat-block">
+          <div class="stat-num">33</div>
+          <div class="stat-label">Commits (v0.2.1 closure 이후)</div>
+        </div>
+
+        <div class="stat-block">
+          <div class="stat-num">7,908</div>
+          <div class="stat-label">추가 라인 (코드 + 문서)</div>
+        </div>
+
+        <div class="stat-block">
+          <div class="stat-num">162 / 163</div>
+          <div class="stat-label">pytest pass (시간 의존 1건 별건)</div>
+        </div>
+
+        <div class="stat-block">
+          <div class="stat-num">9 / 9</div>
+          <div class="stat-label">Phase 9 TASK merged (100%)</div>
+        </div>
+
+        <ul class="phase-list">
+          <li><span>Phase 1~8 (TASK_001~054)</span><span class="ok">53 merged</span></li>
+          <li><span>Phase 9 Tier 1 PoC (055~059)</span><span class="ok">5 merged</span></li>
+          <li><span>Phase 9 Tier 2 고도화 (060~063)</span><span class="ok">4 merged</span></li>
+          <li><span>5월 호 Issue 1 발행</span><span class="pending">5/31 예정</span></li>
+        </ul>
+      </div>
+    </main>
+
+    <footer>
+      <div class="ai-disclosure">본 호는 인간 편집장이 작성·승인했으며 Claude AI 보조로 통계·구조화를 수행했습니다 (Sonnet 4.6).</div>
+      <div class="links">github.com/<span>shinbuheon-prog</span>/claude-magazine</div>
+    </footer>
+  </div>
+</body>
+</html>
