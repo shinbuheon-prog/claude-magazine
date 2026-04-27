@@ -41,13 +41,15 @@ except ModuleNotFoundError:
             return ""
 
 if sys.platform == "win32" and not getattr(sys.stdout, "_utf8_wrapped", False):
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-        sys.stdout._utf8_wrapped = True  # type: ignore[attr-defined]
-        sys.stderr._utf8_wrapped = True  # type: ignore[attr-defined]
-    except (AttributeError, ValueError):
-        pass
+    # reconfigure 패턴 사용 — stream 자체 교체는 pytest capture와 충돌 (다른 모듈 패턴 통일)
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+            sys.stdout._utf8_wrapped = True  # type: ignore[attr-defined]
+            sys.stderr._utf8_wrapped = True  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
 
 load_dotenv()
 
@@ -58,6 +60,27 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 SOURCE_FETCH_TIMEOUT = 15
 MAX_SOURCE_CHARS = 18000
+VERDICT_NORMALIZATION = {
+    "확인됨": "confirmed",
+    "confirmed": "confirmed",
+    "과장": "overstated",
+    "overstated": "overstated",
+    "출처 불충분": "insufficient_source",
+    "insufficient_source": "insufficient_source",
+    "수정 필요": "needs_correction",
+    "needs_correction": "needs_correction",
+}
+
+
+def _normalize_verdict_label(label: str) -> str | None:
+    raw = str(label or "").strip()
+    if not raw:
+        return None
+    direct = VERDICT_NORMALIZATION.get(raw.lower(), VERDICT_NORMALIZATION.get(raw))
+    if direct:
+        return direct
+    base = re.split(r"[(/[]", raw, maxsplit=1)[0].strip()
+    return VERDICT_NORMALIZATION.get(base.lower(), VERDICT_NORMALIZATION.get(base))
 
 
 def load_template() -> str:
@@ -189,6 +212,7 @@ def _build_citation_messages(article_id: str, draft_text: str, template: str) ->
 
 def _write_log(
     *,
+    article_id: str | None,
     request_id: str | None,
     input_tokens: int,
     output_tokens: int,
@@ -197,9 +221,11 @@ def _write_log(
     provider: str,
     model: str,
     citations_path: Path | None,
+    verdict_summary: dict[str, Any] | None = None,
 ) -> Path:
     log_entry = {
         "timestamp": datetime.now().isoformat(),
+        "article_id": article_id,
         "request_id": request_id,
         "provider": provider,
         "model": model,
@@ -208,11 +234,77 @@ def _write_log(
         "cache_read_input_tokens": cache_read_tokens,
         "cache_creation_input_tokens": cache_creation_tokens,
         "citations_path": str(citations_path.relative_to(ROOT)) if citations_path else None,
+        "verdict_summary": verdict_summary or {},
     }
     log_file = LOGS_DIR / f"factcheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     log_file.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")
+    if article_id:
+        article_log = LOGS_DIR / f"factcheck_{article_id}.json"
+        article_log.write_text(json.dumps(log_entry, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[log] request_id={request_id} -> {log_file.name}", file=sys.stderr)
     return log_file
+
+
+def parse_verdicts(result_text: str) -> list[dict[str, str]]:
+    verdicts: list[dict[str, str]] = []
+    for raw_line in (result_text or "").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        normalized = _normalize_verdict_label(cells[1])
+        if not normalized:
+            continue
+        verdicts.append(
+            {
+                "claim": cells[0],
+                "verdict": normalized,
+                "evidence": cells[2] if len(cells) > 2 else "",
+                "note": cells[3] if len(cells) > 3 else "",
+            }
+        )
+    return verdicts
+
+
+def calculate_summary(verdicts: list[dict[str, str]]) -> dict[str, Any]:
+    total_claims = len(verdicts)
+    counts = {
+        "confirmed": 0,
+        "overstated": 0,
+        "insufficient_source": 0,
+        "needs_correction": 0,
+    }
+    critical_issues: list[str] = []
+
+    for verdict in verdicts:
+        normalized = _normalize_verdict_label(str(verdict.get("verdict", ""))) or str(verdict.get("verdict", ""))
+        if normalized in counts:
+            counts[normalized] += 1
+        if normalized == "needs_correction":
+            claim = str(verdict.get("claim") or "").strip()
+            note = str(verdict.get("note") or "").strip()
+            critical_issues.append(f"{claim}: {note}".strip(": "))
+
+    confirmed_ratio = counts["confirmed"] / total_claims if total_claims else 0.0
+    if confirmed_ratio < 0.5:
+        recommendation = "kill"
+    elif confirmed_ratio < 0.85 or critical_issues:
+        recommendation = "revise"
+    else:
+        recommendation = "proceed"
+
+    return {
+        "total_claims": total_claims,
+        "confirmed_count": counts["confirmed"],
+        "confirmed_ratio": confirmed_ratio,
+        "overstated_count": counts["overstated"],
+        "insufficient_source_count": counts["insufficient_source"],
+        "needs_correction_count": counts["needs_correction"],
+        "critical_issues": critical_issues,
+        "recommendation": recommendation,
+    }
 
 
 def run_factcheck(draft_text: str, source_bundle: str, *, article_id: str | None = None, category: str = "all") -> str:
@@ -267,6 +359,7 @@ def run_factcheck(draft_text: str, source_bundle: str, *, article_id: str | None
             raw_response=result.raw,
         )
 
+    verdict_summary = calculate_summary(parse_verdicts(result.text))
     log_usage(
         getattr(trace, "id", None),
         result.input_tokens,
@@ -275,6 +368,7 @@ def run_factcheck(draft_text: str, source_bundle: str, *, article_id: str | None
         request_id=result.request_id,
     )
     _write_log(
+        article_id=article_id,
         request_id=result.request_id,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
@@ -283,6 +377,7 @@ def run_factcheck(draft_text: str, source_bundle: str, *, article_id: str | None
         provider=result.provider,
         model=result.model or "claude-opus-4-7",
         citations_path=citations_path,
+        verdict_summary=verdict_summary,
     )
     return result.text
 

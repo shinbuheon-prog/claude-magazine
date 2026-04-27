@@ -20,6 +20,7 @@ DB_PATH = Path(os.environ.get("SOURCE_DB_PATH", "data/source_registry.db"))
 if not DB_PATH.is_absolute():
     DB_PATH = ROOT / DB_PATH
 DB_PATH.parent.mkdir(exist_ok=True)
+VALID_STANCES = {"pro", "neutral", "con", "unknown", "affected"}
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS sources (
@@ -145,7 +146,7 @@ def add_source(
             if classify_stance is not None:
                 try:
                     inferred = classify_stance(content_preview, topic)
-                    if inferred in {"pro", "neutral", "con", "unknown"}:
+                    if inferred in VALID_STANCES:
                         stance = inferred
                 except Exception:
                     # 자동 분류 실패 시 전달받은 stance 유지 (예외 전파 금지)
@@ -219,6 +220,8 @@ def update_source(source_id: str, **fields) -> bool:
     updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
     if not updates:
         return False
+    if "stance" in updates and updates["stance"] not in VALID_STANCES:
+        raise ValueError(f"잘못된 stance: {updates['stance']} (가능: {sorted(VALID_STANCES)})")
 
     conn = _get_conn()
     try:
@@ -320,7 +323,7 @@ def _cli_update(argv: list[str]) -> int:
     parser.add_argument("--quote-limit", dest="quote_limit", type=int)
     parser.add_argument("--article-id", dest="article_id")
     parser.add_argument("--language", choices=["ko", "en", "ja", "zh", "unknown"])
-    parser.add_argument("--stance", choices=["pro", "neutral", "con", "unknown"])
+    parser.add_argument("--stance", choices=sorted(VALID_STANCES))
     parser.add_argument("--is-official", dest="is_official", type=int, choices=[0, 1])
     parser.add_argument("--source-type", dest="source_type")
     parser.add_argument("--topics", help="comma-separated topics")
